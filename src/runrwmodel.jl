@@ -22,16 +22,6 @@ onestep(wrw, P=0., vm=0.1, safety=true) # should fail if safety=false
 mystuff = multistep(wstar, [0.15 0.17 0.18])
 multistepplot(mystuff)
 
-# probably deprecate
-wnew = findlimitcycle(wrw, target=:speed=>0.4, varying=:P)
-onestep(wnew)
-onestep(wnew).speed
-onestep(wrwg)
-onestep(wrwg,P=0.1)
-wstar = findlimitcycle(wrw, target=:speed=>0.4, varying=:P)
-findlimitcycle(wrw, target=:speed=>0.4, varying=:P, vm=0.2)
-findlimitcycle(wrw, vm=0.2, target=:speed=>0.4, varying=:P)
-
 # walk downhill
 onestep(wstar, δangle=-0.05)
 

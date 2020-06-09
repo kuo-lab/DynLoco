@@ -7,7 +7,7 @@ using JuMP, Ipopt, Plots, Setfield
 using StructArrays
 
 export Walk, Parms, onestep
-export findgait, findlimitcycle
+export findgait
 
 """
     w = Walk(vm, P, α, γ, L, M, g, parms, limitcycle)
@@ -283,8 +283,6 @@ export totalwork, totaltime
                            δplot]
     end
 
-
-
     # vplot
     @series begin
         subplot := 1
@@ -419,7 +417,7 @@ function optwalkslope(w::Walk, numsteps=5; boundaryvels::Union{Tuple,Nothing} = 
         error("The model was not solved correctly.")
         println(termination_status(optsteps))
     end
-    return multistep(Walk(w,vm=value(v[1])), value.(P), value.(δ), boundaryvels)
+    return multistep(Walk(w,vm=value(v[1])), value.(P), value.(δ), value(v[1]), boundaryvels)
 end
 
 export optwalkslope
@@ -428,5 +426,14 @@ function logshave(x, xmin=1e-10)
     x >= xmin ? log(x) : log(xmin) + (x - xmin)
 end # logshave
 export logshave
+
+export islimitcycle
+"""
+    islimitcycle(w::Walk)
+
+Checks whether `w` is a limit cycle, i.e. taking one step
+returns nearly the same gait conditions for the next step.
+"""
+islimitcycle(w::Walk) = onestep(w).vm ≈ w.vm
 
 end # Module
