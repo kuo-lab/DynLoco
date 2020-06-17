@@ -27,6 +27,7 @@ keyword arguments.
     g = 1.  # gravitational acceleration
     parms = (:α, :γ, :L, :M, :g) # a list of the model parameters
     limitcycle = (parms = (:vm,), f = w -> onestep(w).vm - w.vm)
+    safety = false
 end
 
 export StepResults
@@ -96,7 +97,7 @@ momentum to reach middle stance. A step will be returned with very long
 step time, and very slow mid-stance velocity.
 """
 function onestep(w::Walk; vm=w.vm, P=w.P, δangle = 0.,
-    α=w.α, γ=w.γ,g=w.g,L=w.L,safety=false)
+    α=w.α, γ=w.γ,g=w.g,L=w.L,safety=w.safety)
     mylog = safety ? logshave : log # logshave doesn't blow up on negative numbers
     # Start at mid-stance leg vertical, and find the time tf1
     # to heelstrike, and angular velocity Ωminus
@@ -120,16 +121,26 @@ function onestep(w::Walk; vm=w.vm, P=w.P, δangle = 0.,
     gto = γ - θnew - Ωplus # needs to be positive for pendulum to reach next mid-stance
     if safety && gto <= 0
         tf2 = 1e3 - gto # more negative is worse, increasing a tf2 time
-    else
+    else # safety off OR gto positive
         # time to mid-stance, phase 2
-        tf2 = mylog((γ + √(2γ*θnew-θnew^2+Ωplus^2))/(gto)) # time to mid-stance, phase 2
+        inroot = (2γ*θnew-θnew^2+Ωplus^2)
+        if inroot >= 0
+#            tf2 = mylog((γ + √(2γ*θnew-θnew^2+Ωplus^2))/(gto)) # time to mid-stance, phase 2
+            tf2 = mylog((γ + √inroot)/(gto)) # time to mid-stance, phase 2
+        else # inroot negative,
+            tf2 = 1e4 - inroot # more negative inroot extends time
+        end
+
     end
     twicenextenergy = (2g*L*cos(θnew-γ)+L^2*Ωplus^2-2g*L*cos(-γ)) # to find next vm
-    if safety && twicenextenergy < 0.
+    if twicenextenergy >= 0.
+        vmnew = √twicenextenergy
+    elseif safety # not enough energy
         vmnew = (1e-5)*exp(twicenextenergy)
-    else
-        vmnew = √twicenextenergy # mid-stance vel
+    else # no safety, not enough energy
+        vmnew = √twicenextenergy # this should fail
     end
+
     # Step metrics
     steplength = 2L*sin(α) # rimless wheel step length
     tf = tf1 + tf2 # total time mid-stance to mid-stance
@@ -425,7 +436,7 @@ export optwalkslope
 function logshave(x, xmin=1e-10)
     x >= xmin ? log(x) : log(xmin) + (x - xmin)
 end # logshave
-export logshave
+export onestep
 
 export islimitcycle
 """

@@ -106,12 +106,13 @@ plot(value.(P)) # push-off impulses
 plot([0.; cumsum(value.(δ))])
 myout = optwalk(wstar)
 
+# Optwalk
 # level walking
-myout = optwalk(wstar, 6, boundaryvels = (0.1,0.1))
+myout = optwalk(wstar, 6, boundaryvels = (0.1,0.1)) # walk 6 steps
 multistepplot(myout)
 myout = optwalk(wstar, 6, boundaryvels = (0.,0.), δ=[-0.1,0.,0.,0.,0.,0.1])
 multistepplot(myout)
-myout1 = optwalkslope(wstar, 5, boundaryvels = (0., 0.), symmetric = true)
+myout1 = optwalkslope(wstar, 6, boundaryvels = (0., 0.), symmetric = true)
 multistepplot(myout1)
 myout2 = optwalk(wstar, 5, boundaryvels=(0.,0.), totaltime=myout1.totaltime,
     δ=myout1.δangles) # shoot doesn't work
@@ -165,7 +166,7 @@ for nsteps in [1, 2, 3, 4, 5, 7, 10, 15, 20]
     @variable(optsteps, P[1:nsteps]>=0, start=wstar4.P) # JuMP variables P
     δs = zeros(nsteps) # set bumps to zero
     # constraints: start
-    @variable(optsteps, v[1:nsteps+1], start=wstar4.vm)
+    @variable(optsteps, v[1:nsteps+1]>=0, start=wstar4.vm)
     #@constraint(optsteps, v[1] == boundaryvel)
     #@constraint(optsteps, v[nsteps+1] == boundaryvel)
     register(optsteps, :onestepv, 2, (v,P)->onestep(wstar4,P=P,vm=v,safety=true).vm, autodiff=true) # input P, output vm
@@ -175,17 +176,21 @@ for nsteps in [1, 2, 3, 4, 5, 7, 10, 15, 20]
     for i = 1:nsteps # collocation points
         @NLconstraint(optsteps, v[i+1]==onestepv(v[i],P[i]))
     end
-    ctime = 0.04 # 0.07 looks pretty good
+    ctime = 0.014# 0.07 looks pretty good
     @NLobjective(optsteps, Min, sum((P[i]^2 for i=1:nsteps)) + v[1]^2 - boundaryvels[1]^2 +
         ctime*totaltime)
     optimize!(optsteps)
-    global result = multistep(Walk(wstar4,vm=value(v[1])), value.(P), δs, value(v[1]), boundaryvels)
+    global result = multistep(Walk(wstar4,vm=value(v[1]),safety=true), value.(P), δs, value(v[1]), boundaryvels)
     #Plots.display(multistepplot!(p,result))
-    #Plots.display(plot!(cumsum([0;result.steps.tf]), [boundaryvels[1];result.steps.vm]))
-    plotsmoothvees(result, tchange=4.)
+    #plot!(cumsum([0;result.steps.tf]), [boundaryvels[1];result.steps.vm])
+    plotsmoothvees(result, tchange=6.)
     #plot!(cumsum([0; result.steps.tf]),[0; result.steps.speed])
 end
+xlabel!("time")
+ylabel!("speed")
 Plots.display(p)
+
+savefig("shortwalksplot.pdf")
 # a low time cost (min work) causes almost constant (slow) speeds
 # and the more time costs, the more the top speed
 # TODO: My boundary vels are a bit weird
@@ -194,7 +199,7 @@ Plots.display(p)
 plot(cumsum([0;result.steps.tf]), [boundaryvels[1];result.steps.vm])
 
 # Make a plot where it takes time to get up to speed
-function plotsmoothvees(msr::MultiStepResults; tchange = 2)
+function plotsmoothvees(msr::MultiStepResults; tchange = 3)
     v = [msr.vm0; msr.steps.vm]
     #v = [msr.vm0; msr.steps.speed]
     n = length(msr.steps)
@@ -204,6 +209,11 @@ function plotsmoothvees(msr::MultiStepResults; tchange = 2)
     vend = v[n+1]*(1 .- t0/tchange).^2
     alltimes = [t0; times .+ t0[end]; t0 .+ t0[end] .+ times[end]]
     allvees = [vstart; v; vend]
+    #println(alltimes)
+    #println(allvees)
+    #interp_cubic = CubicSplineInterpolation(alltimes, Float64[allvees...])
+    #newtimes = range(alltimes[1], alltimes[end], 20)
+    #plot!(newtimes, interp_cubic(newtimes))
     plot!(p,alltimes, allvees)
 end
 
@@ -219,3 +229,8 @@ using DSP.Filters
 #
 x = range(-0.001,0.1, length=100)
 plot(x,logshave.(x))
+
+
+using StatsPlots
+y = rand(100, 4) # Four series of 100 points each
+violin(["Series 1" "Series 2" "Series 3" "Series 4"], y, leg = false)
