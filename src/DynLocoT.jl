@@ -120,7 +120,7 @@ function onestep(w::Walk; vm=w.vm, P=w.P, δangle = 0.,
     #    tf2 = mylog((γ + √(2γ*θnew-θnew^2+Ωplus^2))/(γ-θnew-Ωplus))
     gto = γ - θnew - Ωplus # needs to be positive for pendulum to reach next mid-stance
     if safety && gto <= 0
-        tf2 = 1e3 - gto # more negative is worse, increasing a tf2 time
+        tf2 = 1e3 - gto # more negative gto is worse, increasing a tf2 time
     else # safety off OR gto positive
         # time to mid-stance, phase 2
         inroot = (2γ*θnew-θnew^2+Ωplus^2)
@@ -136,7 +136,7 @@ function onestep(w::Walk; vm=w.vm, P=w.P, δangle = 0.,
     if twicenextenergy >= 0.
         vmnew = √twicenextenergy
     elseif safety # not enough energy
-        vmnew = (1e-5)*exp(twicenextenergy)
+        vmnew = (1e-3)*exp(twicenextenergy)
     else # no safety, not enough energy
         vmnew = √twicenextenergy # this should fail
     end
@@ -241,7 +241,7 @@ Optional named keyword version can be called with any order of arguments after
     multistep(walk; Ps = [0.15, 0.15], δangles = [-0.1, 0.1])
 """
 function multistep(w::Walk; Ps=w.P*ones(5), δangles=zeros(length(Ps)), vm0 = w.vm, walkparms...)
-    return multistep(Walk(w, walkparms), Ps, δangles)
+    return multistep(Walk(w; walkparms...), Ps, δangles)
 end
 
 function multistep(w::Walk, Ps::AbstractArray, δangles=zeros(length(Ps)), vm0 = w.vm,
@@ -437,6 +437,68 @@ function logshave(x, xmin=1e-10)
     x >= xmin ? log(x) : log(xmin) + (x - xmin)
 end # logshave
 export onestep
+
+using Dierckx
+export plotvees, plotvees!
+
+"""
+    plotvees(results::MultiStepResults [, tchange = 3, boundaryvels = (0.,0.))
+
+Plots a series of discrete speeds for multiple steps, along with a spline
+to connect the discrete points. Returns a `Plot` struct. See also plotvees!(p, ...).
+"""
+plotvees(results::MultiStepResults; veeparms...) = plotvees!(plot(), results; veeparms...)
+
+"plotvees!([p,] results::MultiStepResults) adds to an existing plot."
+plotvees!(results::MultiStepResults; veeparms...) = plotvees!(Plots.CURRENT_PLOT.nullableplot, results; veeparms...)
+
+function plotvees!(p::Plots.Plot, msr::MultiStepResults; tchange = 3, boundaryvels = (0.,0.),
+    color = :auto, usespline=true)
+    v = [msr.vm0; msr.steps.vm] # vm0 is the speed at first step
+    n = length(msr.steps)
+    times = cumsum([tchange; msr.steps.tf]) # add up step times, starting from ramp-up
+    # make smooth ramp-up in speed
+    t0 = range(0, tchange, length=10)
+    vstart = v[1]*(t0/tchange).^2
+    vend = v[n+1]*(1 .- t0/tchange).^2 # ramp-down in speed
+    # make a smooth spline from discrete velocities
+    k = length(v) <= 3 ? length(v)-1 : 3
+    if usespline
+        spline = Spline1D(times, v; k=k)
+        tspline = range(times[1], times[end], length=50)
+        plot!(p,[t0; tspline; t0 .+ times[end]], [vstart; spline.(tspline); vend], color=color)
+    end
+    plot!(p, times, v, seriestype=:scatter, legend=:none, color=color, # dots for discrete velocities
+        xlabel="time", ylabel="speed")
+end
+
+
+
+using JuMP, Ipopt
+export optwalktime
+# ctime is the cost of time
+function optwalktime(w::Walk, nsteps=5; boundaryvels::Union{Tuple,Nothing} = (0.,0.), safety=true,
+    ctime = 0.05, tchange = 3.,walkparms...)
+    w = Walk(w; walkparms...)
+    #println("walkparms = ", walkparms)
+    optsteps = Model(optimizer_with_attributes(Ipopt.Optimizer, "print_level"=>1))
+    @variable(optsteps, P[1:nsteps]>=0, start=w.P) # JuMP variables P
+    δs = zeros(nsteps) # set bumps to zero
+    # constraints: start
+    @variable(optsteps, v[1:nsteps+1]>=0, start=w.vm)
+    register(optsteps, :onestepv, 2, (v,P)->onestep(w,P=P,vm=v,safety=safety).vm, autodiff=true) # input P, output vm
+    register(optsteps, :onestept, 2, (v,P)->onestep(w,P=P,vm=v,safety=safety).tf, autodiff=true)
+    @NLexpression(optsteps, steptime[i=1:nsteps], onestept(v[i],P[i]))
+    @NLexpression(optsteps, totaltime, sum(onestept(v[i],P[i]) for i = 1:nsteps))
+    for i = 1:nsteps # collocation points
+        @NLconstraint(optsteps, v[i+1]==onestepv(v[i],P[i]))
+    end
+    @NLobjective(optsteps, Min, sum((P[i]^2 for i=1:nsteps)) + v[1]^2 - boundaryvels[1]^2 +
+        ctime*totaltime)
+    optimize!(optsteps)
+    result = multistep(Walk(w,vm=value(v[1]),safety=safety), value.(P), δs, value(v[1]), boundaryvels)
+    return result
+end
 
 export islimitcycle
 """

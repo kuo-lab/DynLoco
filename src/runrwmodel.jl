@@ -161,7 +161,7 @@ wstar4 = findgait(wrw, α=0.4, target=:speed=>0.4, varying=:P)
 #p = plot(layout=(3,1))
 p = plot()
 boundaryvels = (0.,0.)
-for nsteps in [1, 2, 3, 4, 5, 7, 10, 15, 20]
+for nsteps in [2, 3, 4, 5, 7, 10, 15, 20]
     optsteps = Model(optimizer_with_attributes(Ipopt.Optimizer, "print_level"=>1))
     @variable(optsteps, P[1:nsteps]>=0, start=wstar4.P) # JuMP variables P
     δs = zeros(nsteps) # set bumps to zero
@@ -183,7 +183,7 @@ for nsteps in [1, 2, 3, 4, 5, 7, 10, 15, 20]
     global result = multistep(Walk(wstar4,vm=value(v[1]),safety=true), value.(P), δs, value(v[1]), boundaryvels)
     #Plots.display(multistepplot!(p,result))
     #plot!(cumsum([0;result.steps.tf]), [boundaryvels[1];result.steps.vm])
-    plotsmoothvees(result, tchange=6.)
+    plotvees(result, tchange=3., holdon=true)
     #plot!(cumsum([0; result.steps.tf]),[0; result.steps.speed])
 end
 xlabel!("time")
@@ -195,42 +195,24 @@ savefig("shortwalksplot.pdf")
 # and the more time costs, the more the top speed
 # TODO: My boundary vels are a bit weird
 
-# Plot speed vs. time, accumulating time
-plot(cumsum([0;result.steps.tf]), [boundaryvels[1];result.steps.vm])
-
-# Make a plot where it takes time to get up to speed
-function plotsmoothvees(msr::MultiStepResults; tchange = 3)
-    v = [msr.vm0; msr.steps.vm]
-    #v = [msr.vm0; msr.steps.speed]
-    n = length(msr.steps)
-    times = cumsum([0; result.steps.tf])
-    t0 = range(0, tchange, length=10)
-    vstart = v[1]*(t0/tchange).^2
-    vend = v[n+1]*(1 .- t0/tchange).^2
-    alltimes = [t0; times .+ t0[end]; t0 .+ t0[end] .+ times[end]]
-    allvees = [vstart; v; vend]
-    #println(alltimes)
-    #println(allvees)
-    #interp_cubic = CubicSplineInterpolation(alltimes, Float64[allvees...])
-    #newtimes = range(alltimes[1], alltimes[end], 20)
-    #plot!(newtimes, interp_cubic(newtimes))
-    plot!(p,alltimes, allvees)
+## Optimize for a bunch of different distances
+# `ctime` can go as low as 0.012, about 0.05 is ok
+p = plot()
+results = Array{MultiStepResults,1}(undef,0)
+for (i,nsteps) in enumerate([1, 2, 3, 4, 5, 7, 10, 15, 20])
+    result = optwalktime(wstar4, nsteps, ctime=0.05)
+    plotvees(result, tchange=3, holdon=true, color=i)
+    push!(results, result)
 end
+Plots.display(p)
 
-# Another way to do it is with exponentials
-
-# filter it
-using DSP
-using DSP.Filters
-
-
-# With logshave we're able to use a boundaryvel as low as 0.16, but no lower
 
 #
 x = range(-0.001,0.1, length=100)
 plot(x,logshave.(x))
 
+plt = Plots.CURRENT_PLOT
+c=plt.plotargs[:color_palette][plt.n+1]
 
-using StatsPlots
-y = rand(100, 4) # Four series of 100 points each
-violin(["Series 1" "Series 2" "Series 3" "Series 4"], y, leg = false)
+wslow=findgait(Walk(wstar4,safety=true), target=:vm=>0.05, varying=:P)
+onestep(wslow)
