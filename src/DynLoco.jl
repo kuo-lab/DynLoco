@@ -1,10 +1,11 @@
-module DynLocoT
+module DynLoco
 
 # Locomotion models
 
 using Parameters #, DifferentialEquations
 using JuMP, Ipopt, Plots, Setfield
 using StructArrays
+using Dierckx
 
 export Walk, Parms, onestep
 export findgait

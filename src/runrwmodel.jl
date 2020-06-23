@@ -1,5 +1,5 @@
 
-using DynLocoT
+using DynLoco
 using Plots
 
 wrw = Walk(P=0.15,vm=0.38)

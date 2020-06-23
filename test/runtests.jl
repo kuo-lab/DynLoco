@@ -1,7 +1,7 @@
-using DynLocoT
+using DynLoco
 using Test
 
-@testset "DynLocoT.jl" begin
+@testset "DynLoco.jl" begin
     wrw = Walk(P=0.15, vm = 0.38)
     @test typeof(wrw) == Walk # basic constructor for Walk
 
