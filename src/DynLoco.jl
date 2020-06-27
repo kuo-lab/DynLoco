@@ -28,7 +28,7 @@ keyword arguments.
     g = 1.  # gravitational acceleration
     parms = (:α, :γ, :L, :M, :g) # a list of the model parameters
     limitcycle = (parms = (:vm,), f = w -> onestep(w).vm - w.vm)
-    safety = false
+    safety = false # model falls backward if not enough momentum
 end
 
 export StepResults
@@ -241,18 +241,18 @@ Optional named keyword version can be called with any order of arguments after
 `walk`:
     multistep(walk; Ps = [0.15, 0.15], δangles = [-0.1, 0.1])
 """
-function multistep(w::Walk; Ps=w.P*ones(5), δangles=zeros(length(Ps)), vm0 = w.vm, walkparms...)
-    return multistep(Walk(w; walkparms...), Ps, δangles)
+function multistep(w::Walk; Ps=w.P*ones(5), δangles=zeros(length(Ps)), vm0 = w.vm, extracost = 0, walkparms...)
+    return multistep(Walk(w; walkparms...), Ps, δangles, extracost = extracost)
 end
 
 function multistep(w::Walk, Ps::AbstractArray, δangles=zeros(length(Ps)), vm0 = w.vm,
-    boundaryvels=())
+    boundaryvels=(); extracost = 0)
     steps = StructArray{StepResults}(undef, length(Ps))
     for i in 1:length(Ps)
         steps[i] = StepResults(onestep(w, P=Ps[i], δangle=δangles[i])...)
         w = Walk(w, vm=steps[i].vm)
     end
-    totalcost = sum(steps[i].Pwork for i in 1:length(Ps))
+    totalcost = sum(steps[i].Pwork for i in 1:length(Ps)) + extracost
     totaltime = sum(getfield.(steps,:tf))
     finalvm = w.vm
     return MultiStepResults(steps, totalcost, totaltime, vm0, δangles, boundaryvels)
@@ -267,13 +267,16 @@ export totalwork, totaltime
 
 @userplot MultiStepPlot
 
-@recipe function f(h::MultiStepPlot)
+@recipe function f(h::MultiStepPlot; plotwork=false)
 
     markershape --> :circle
 
     msr = h.args[1]
     v = [msr.vm0; msr.steps.vm] # all velocities
     P = msr.steps.P
+    if plotwork
+        P .= 1/2 .* P.^2
+    end
     δ = msr.δangles
     boundaryvels = msr.boundaryvels
 
@@ -327,11 +330,25 @@ export totalwork, totaltime
 end
 
 using JuMP, Ipopt
-export optwalk
+export optwalk, optwalkslope
 
+"""
+    optwalk(w::Walk, numsteps=5)
+
+Optimizes push-offs to walk `numsteps` steps. Returns a `MultiStepResults`
+struct. Allows slopes to be specified as keyword `δs` array of the slope of each successive
+step.
+
+Other keyword arguments: `boundaryvels = (vm,vm)` can specify a tuple of initial and
+final speeds, default nominal middle-stance speed `vm`. To start and end at rest, use `(0,0)`.
+`boundarywork = true` whether cost includes the work needed to
+start and end from `boundaryvels`. `totaltime` is the total time to take the steps, by default
+the same time expected of the nominal `w` on level ground.
+
+See also `optwalkslope`
+"""
 function optwalk(w::Walk, numsteps=5; boundaryvels::Union{Tuple,Nothing} = nothing,
-    boundarywork = true, symmetric=false,
-    totaltime=numsteps*onestep(w).tf,
+    boundarywork = true, totaltime=numsteps*onestep(w).tf,
     δ = zeros(numsteps)) # default to taking the time of regular steady walking
 
     optsteps = Model(optimizer_with_attributes(Ipopt.Optimizer, "print_level"=>0))
@@ -361,9 +378,9 @@ function optwalk(w::Walk, numsteps=5; boundaryvels::Union{Tuple,Nothing} = nothi
     @NLconstraint(optsteps, summedtime == totaltime) # total time
 
     if boundarywork
-        @objective(optsteps, Min, sum((P[i]^2 for i=1:numsteps))+v[1]^2-boundaryvels[1]^2) # minimum pos work
+        @objective(optsteps, Min, 1/2*(sum((P[i]^2 for i=1:numsteps))+v[1]^2-boundaryvels[1]^2)) # minimum pos work
     else
-        @objective(optsteps, Min, sum((P[i]^2 for i=1:numsteps))) # minimum pos work
+        @objective(optsteps, Min, 1/2*sum((P[i]^2 for i=1:numsteps))) # minimum pos work
     end
     optimize!(optsteps)
     if termination_status(optsteps) == MOI.LOCALLY_SOLVED || termination_status(optsteps) == MOI.OPTIMAL
@@ -372,10 +389,23 @@ function optwalk(w::Walk, numsteps=5; boundaryvels::Union{Tuple,Nothing} = nothi
         error("The model was not solved correctly.")
         println(termination_status(optsteps))
     end
-
-    return multistep(Walk(w,vm=value(v[1])), value.(P), δ, value(v[1]), boundaryvels) #, optimal_solution
+    return multistep(Walk(w,vm=value(v[1])), value.(P), δ, value(v[1]), boundaryvels,
+        extracost = boundarywork ? 1/2*(value(v[1])^2 - boundaryvels[1]^2) : 0) #, optimal_solution
 end
 
+"""
+    optwalkslope(w::Walk, numsteps=5)
+
+Optimizes push-offs and terrain profile to walk `numsteps` steps. Returns a `MultiStepResults`
+struct. Optional keyword arguments: `boundaryvels = (vm,vm)` can specify a tuple of initial and
+final speeds, default nominal middle-stance speed `vm`. To start and end at rest, use `(0,0)`.
+`boundarywork = true` whether cost includes the work needed to
+start and end from `boundaryvels`. `symmetric = false` whether to enforce fore-aft symmetry in
+the slope profile. `totaltime` is the total time to take the steps, by default the same
+time expected of the nominal `w` on level ground.
+
+See also `optwalk`
+"""
 function optwalkslope(w::Walk, numsteps=5; boundaryvels::Union{Tuple,Nothing} = nothing,
     boundarywork = true, symmetric=false,
     totaltime=numsteps*onestep(w).tf) # default to taking the time of regular steady walking
@@ -417,9 +447,9 @@ function optwalkslope(w::Walk, numsteps=5; boundaryvels::Union{Tuple,Nothing} = 
     end
 
     if boundarywork
-        @objective(optsteps, Min, sum((P[i]^2 for i=1:numsteps))+v[1]^2-boundaryvels[1]^2) # minimum pos work
+        @objective(optsteps, Min, sum(P[i]^2 for i=1:numsteps)+v[1]^2-boundaryvels[1]^2) # minimum pos work
     else
-        @objective(optsteps, Min, sum((P[i]^2 for i=1:numsteps))) # minimum pos work
+        @objective(optsteps, Min, sum(P[i]^2 for i=1:numsteps)) # minimum pos work
     end
 
     optimize!(optsteps)
@@ -429,10 +459,10 @@ function optwalkslope(w::Walk, numsteps=5; boundaryvels::Union{Tuple,Nothing} = 
         error("The model was not solved correctly.")
         println(termination_status(optsteps))
     end
-    return multistep(Walk(w,vm=value(v[1])), value.(P), value.(δ), value(v[1]), boundaryvels)
+    return multistep(Walk(w,vm=value(v[1])), value.(P), value.(δ), value(v[1]), boundaryvels,
+        extracost = boundarywork ? 1/2*(value(v[1])^2-boundaryvels[1]^2) : 0)
 end
 
-export optwalkslope
 
 function logshave(x, xmin=1e-10)
     x >= xmin ? log(x) : log(xmin) + (x - xmin)
@@ -478,26 +508,48 @@ end
 using JuMP, Ipopt
 export optwalktime
 # ctime is the cost of time
+"""
+    optwalktime(w::Walk, numsteps=5)
+
+Optimizes push-offs to walk `numsteps` steps in minimum work and time. Returns a `MultiStepResults`
+struct. Optional keyword arguments: `δ` array of slopes for uneven terrain. `ctime` is the relative
+cost of time in units of work/time.
+
+Other keywords: `boundaryvels = (vm,vm)`
+can specify a tuple of initial and
+final speeds, default nominal middle-stance speed `vm`. To start and end at rest, use `(0,0)`.
+`boundarywork = true` whether cost includes the work needed to
+start and end from `boundaryvels`. `symmetric = false` whether to enforce fore-aft symmetry in
+the slope profile. `totaltime` is the total time to take the steps, by default the same
+time expected of the nominal `w` on level ground.
+
+See also `optwalk` and `optwalkslope`
+"""
 function optwalktime(w::Walk, nsteps=5; boundaryvels::Union{Tuple,Nothing} = (0.,0.), safety=true,
-    ctime = 0.05, tchange = 3.,walkparms...)
+    ctime = 0.05, tchange = 3., boundarywork = true, δs = zeros(nsteps), walkparms...)
     w = Walk(w; walkparms...)
-    #println("walkparms = ", walkparms)
     optsteps = Model(optimizer_with_attributes(Ipopt.Optimizer, "print_level"=>1))
     @variable(optsteps, P[1:nsteps]>=0, start=w.P) # JuMP variables P
-    δs = zeros(nsteps) # set bumps to zero
     # constraints: start
     @variable(optsteps, v[1:nsteps+1]>=0, start=w.vm)
-    register(optsteps, :onestepv, 2, (v,P)->onestep(w,P=P,vm=v,safety=safety).vm, autodiff=true) # input P, output vm
-    register(optsteps, :onestept, 2, (v,P)->onestep(w,P=P,vm=v,safety=safety).tf, autodiff=true)
-    @NLexpression(optsteps, steptime[i=1:nsteps], onestept(v[i],P[i]))
-    @NLexpression(optsteps, totaltime, sum(onestept(v[i],P[i]) for i = 1:nsteps))
+    register(optsteps, :onestepv, 3, (v,P,δ)->onestep(w,P=P,vm=v,δangle=δ,safety=safety).vm, autodiff=true) # input P, output vm
+    register(optsteps, :onestept, 3, (v,P,δ)->onestep(w,P=P,vm=v,δangle=δ,safety=safety).tf, autodiff=true)
+    @NLexpression(optsteps, steptime[i=1:nsteps], onestept(v[i],P[i],δs[i]))
+    @NLexpression(optsteps, totaltime, sum(onestept(v[i],P[i],δs[i]) for i = 1:nsteps))
     for i = 1:nsteps # collocation points
-        @NLconstraint(optsteps, v[i+1]==onestepv(v[i],P[i]))
+        @NLconstraint(optsteps, v[i+1]==onestepv(v[i],P[i],δs[i]))
     end
-    @NLobjective(optsteps, Min, sum((P[i]^2 for i=1:nsteps)) + v[1]^2 - boundaryvels[1]^2 +
-        ctime*totaltime)
+    if boundarywork
+        @NLobjective(optsteps, Min, 1/2*(sum(P[i]^2 for i=1:nsteps) + v[1]^2 - boundaryvels[1]^2) +
+            ctime*totaltime)
+    else
+        @NLobjective(optsteps, Min, 1/2*(sum(P[i]^2 for i=1:nsteps)) +
+            ctime*totaltime)
+    end
     optimize!(optsteps)
-    result = multistep(Walk(w,vm=value(v[1]),safety=safety), value.(P), δs, value(v[1]), boundaryvels)
+    result = multistep(Walk(w,vm=value(v[1]),safety=safety), value.(P), δs, value(v[1]),
+        boundaryvels, extracost = ctime*value(totaltime) +
+        (boundarywork ? 1/2*(value(v[1])^2-boundaryvels[1]^2) : 0))
     return result
 end
 

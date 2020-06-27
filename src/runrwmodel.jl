@@ -197,11 +197,12 @@ savefig("shortwalksplot.pdf")
 
 ## Optimize for a bunch of different distances
 # `ctime` can go as low as 0.012, about 0.05 is ok
+wstar4 = findgait(Walk(α=0.4), target=:speed=>0.4, varying=:P)
 p = plot()
 results = Array{MultiStepResults,1}(undef,0)
 for (i,nsteps) in enumerate([1, 2, 3, 4, 5, 7, 10, 15, 20])
     result = optwalktime(wstar4, nsteps, ctime=0.05)
-    plotvees(result, tchange=3, holdon=true, color=i)
+    plotvees!(result, tchange=3, color=i)
     push!(results, result)
 end
 Plots.display(p)
@@ -211,7 +212,7 @@ Plots.display(p)
 x = range(-0.001,0.1, length=100)
 plot(x,logshave.(x))
 
-plt = Plots.CURRENT_PLOT
+plt = Plots.CURRENT_PLOT.nullableplot
 c=plt.plotargs[:color_palette][plt.n+1]
 
 wslow=findgait(Walk(wstar4,safety=true), target=:vm=>0.05, varying=:P)
