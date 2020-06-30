@@ -265,6 +265,15 @@ totalwork(steps::StructArray) = sum(steps.Pwork)
 totaltime(steps::StructArray) = sum(steps.tf)
 export totalwork, totaltime
 
+"""
+    multistepplot(::MultiStepResults)
+
+A Plots.jl recipe for plotting output of `multistep` as 3x1 subplots with mid-stance velocity,
+push-off impulse (or work), and terrain profile. To plot push-off work, use keyword argument
+`plotwork=true`.
+"""
+multistepplot
+
 @userplot MultiStepPlot
 
 @recipe function f(h::MultiStepPlot; plotwork=false)
@@ -274,9 +283,6 @@ export totalwork, totaltime
     msr = h.args[1]
     v = [msr.vm0; msr.steps.vm] # all velocities
     P = msr.steps.P
-    if plotwork
-        P .= 1/2 .* P.^2
-    end
     δ = msr.δangles
     boundaryvels = msr.boundaryvels
 
@@ -310,13 +316,14 @@ export totalwork, totaltime
         end
     end
 
-    # Pplot
+    # Pplot or workplot, interleaved with step numbers, with
     @series begin
         subplot := 2
-        ylabel := "P"
+        ylabel := plotwork ? "Work" : "P"
         ylims := (0, Inf)
-        xlims := (0.5, n+0.5)
-        0:n, [NaN; P]
+        #xlims := (0.5, n+0.5)
+        plotwork ? ([0.5; 1:n; n+0.5], [1/2*(v[1]^2-boundaryvels[1]^2); 1/2 .* P.^2; NaN]) :
+                   ([0.5;1:n;n+0.5], [v[1]-boundaryvels[1]; P; NaN])
     end
 
     if doslope
@@ -467,9 +474,7 @@ end
 function logshave(x, xmin=1e-10)
     x >= xmin ? log(x) : log(xmin) + (x - xmin)
 end # logshave
-export onestep
 
-using Dierckx
 export plotvees, plotvees!
 
 """
@@ -561,5 +566,54 @@ Checks whether `w` is a limit cycle, i.e. taking one step
 returns nearly the same gait conditions for the next step.
 """
 islimitcycle(w::Walk) = onestep(w).vm ≈ w.vm
+
+
+# Optimize walking to match a velocity profile
+# function optwalkvel(w::Walk, vels; boundaryvels::Union{Tuple,Nothing} = nothing,
+#     boundarywork = true,
+#     δ = zeros(numsteps))
+#
+#     optsteps = Model(optimizer_with_attributes(Ipopt.Optimizer, "print_level"=>0))
+#     @variable(optsteps, P[1:numsteps]>=0, start=w.P) # JuMP variables P
+#
+#     if boundaryvels == nothing || isempty(boundaryvels)
+#         boundaryvels = (w.vm, w.vm) # default to given gait if nothing specified
+#     end
+#
+#     if !boundarywork # no hip work at beginning or end; apply boundary velocity constraints
+#         @constraint(optsteps, v[1] == boundaryvels[1])
+#         @constraint(optsteps, v[numsteps+1] == boundaryvels[2])
+#     end
+#
+#     # Constraints
+#     # produce separate functions for speeds and step times
+#     register(optsteps, :onestepv, 3, # velocity after a step
+#         (v,P,δ)->onestep(w,P=P,vm=v, δangle=δ).vm, autodiff=true) # output vm
+#     register(optsteps, :onestept, 3, # time after a step
+#         (v,P,δ)->onestep(w,P=P,vm=v, δangle=δ).tf, autodiff=true)
+#     @NLexpression(optsteps, summedtime, # add up time of all steps
+#         sum(onestept(v[i],P[i],δ[i]) for i = 1:numsteps))
+#     for i = 1:numsteps  # step dynamics
+#         @NLconstraint(optsteps, vels[i]==onestepv(v[i],P[i],δ[i]))
+#     end
+#     @NLconstraint(optsteps, summedtime == totaltime) # total time
+#
+#     if boundarywork
+#         @objective(optsteps, Min, 1/2*(sum((P[i]^2 for i=1:numsteps))+v[1]^2-boundaryvels[1]^2)) # minimum pos work
+#     else
+#         @objective(optsteps, Min, 1/2*sum((P[i]^2 for i=1:numsteps))) # minimum pos work
+#     end
+#     optimize!(optsteps)
+#     if termination_status(optsteps) == MOI.LOCALLY_SOLVED || termination_status(optsteps) == MOI.OPTIMAL
+#         optimal_solution = (vms=value.(v), Ps=value.(P))
+#     else
+#         error("The model was not solved correctly.")
+#         println(termination_status(optsteps))
+#     end
+#     return multistep(Walk(w,vm=value(v[1])), value.(P), δ, value(v[1]), boundaryvels,
+#         extracost = boundarywork ? 1/2*(value(v[1])^2 - boundaryvels[1]^2) : 0) #, optimal_solution
+# end
+
+
 
 end # Module
