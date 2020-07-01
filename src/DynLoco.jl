@@ -230,23 +230,27 @@ function findgait(w::Walk, target::Tuple{Vararg{Pair}}, varying::Tuple)
 end
 
 """
-    multistep(walk [, Ps, δangles, vm0, boundaryvels[1,2], walkparms])
+    multistep(walk; Ps=Ps)
 
 Take multiple steps with a `walk` struct, from mid-stance to mid-stance, with as many
-steps as in push-off array `Ps`, and slope angles `δangles` (default level ground).
-Returns a `MultiStepResults` struct containing individual steps. Additional walkparms
-can be used to apply model parameters such as `α`, `γ`, `M`, etc.
+steps as in push-off array `Ps`. Returns a `MultiStepResults` struct containing individual steps.
 
 Optional named keyword version can be called with any order of arguments after
 `walk`:
-    multistep(walk; Ps = [0.15, 0.15], δangles = [-0.1, 0.1])
+    multistep(walk; Ps = [0.15, 0.15], δangles = [-0.1, 0.1], vm0=walk.vm, boundaryvels=(),
+        extracost = 0, walkparms...)
+
+where slope angles `δangles` (default level ground), `vm0` initial mid-stance velocity,
+`boundaryvels` boundary velocities, `extracost` added onto push-off work, and `walkparms`
+can be used to apply model parameters such as `α`, `γ`, `M`, etc.
 """
-function multistep(w::Walk; Ps=w.P*ones(5), δangles=zeros(length(Ps)), vm0 = w.vm, extracost = 0, walkparms...)
-    return multistep(Walk(w; walkparms...), Ps, δangles, extracost = extracost)
+function multistep(w::Walk; Ps=w.P*ones(5), δangles=zeros(length(Ps)), vm0 = w.vm, extracost = 0,
+    boundaryvels=(), walkparms...)
+    return multistep(Walk(w; walkparms...), Ps, δangles, boundaryvels=boundaryvels, extracost = extracost)
 end
 
-function multistep(w::Walk, Ps::AbstractArray, δangles=zeros(length(Ps)), vm0 = w.vm,
-    boundaryvels=(); extracost = 0)
+function multistep(w::Walk, Ps::AbstractArray, δangles=zeros(length(Ps)); vm0 = w.vm,
+    boundaryvels=(), extracost = 0)
     steps = StructArray{StepResults}(undef, length(Ps))
     for i in 1:length(Ps)
         steps[i] = StepResults(onestep(w, P=Ps[i], δangle=δangles[i])...)
@@ -303,7 +307,7 @@ multistepplot
                            Pplot
                            δplot]
     end
-
+println("boundaryvels = ", boundaryvels)
     # vplot
     @series begin
         subplot := 1
@@ -396,7 +400,7 @@ function optwalk(w::Walk, numsteps=5; boundaryvels::Union{Tuple,Nothing} = nothi
         error("The model was not solved correctly.")
         println(termination_status(optsteps))
     end
-    return multistep(Walk(w,vm=value(v[1])), value.(P), δ, value(v[1]), boundaryvels,
+    return multistep(Walk(w,vm=value(v[1])), value.(P), δ, vm0=value(v[1]), boundaryvels=boundaryvels,
         extracost = boundarywork ? 1/2*(value(v[1])^2 - boundaryvels[1]^2) : 0) #, optimal_solution
 end
 
@@ -466,7 +470,8 @@ function optwalkslope(w::Walk, numsteps=5; boundaryvels::Union{Tuple,Nothing} = 
         error("The model was not solved correctly.")
         println(termination_status(optsteps))
     end
-    return multistep(Walk(w,vm=value(v[1])), value.(P), value.(δ), value(v[1]), boundaryvels,
+    return multistep(Walk(w,vm=value(v[1])), value.(P), value.(δ), vm0=value(v[1]),
+        boundaryvels = boundaryvels,
         extracost = boundarywork ? 1/2*(value(v[1])^2-boundaryvels[1]^2) : 0)
 end
 
@@ -552,8 +557,8 @@ function optwalktime(w::Walk, nsteps=5; boundaryvels::Union{Tuple,Nothing} = (0.
             ctime*totaltime)
     end
     optimize!(optsteps)
-    result = multistep(Walk(w,vm=value(v[1]),safety=safety), value.(P), δs, value(v[1]),
-        boundaryvels, extracost = ctime*value(totaltime) +
+    result = multistep(Walk(w,vm=value(v[1]),safety=safety), value.(P), δs, vm0=value(v[1]),
+        boundaryvels=boundaryvels, extracost = ctime*value(totaltime) +
         (boundarywork ? 1/2*(value(v[1])^2-boundaryvels[1]^2) : 0))
     return result
 end

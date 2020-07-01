@@ -89,15 +89,15 @@ boundaryvels = (0.,0.)
 boundarywork = true
 
 
-Ncruise = 2
-Naccel = 0
+Ncruise = 3
+Naccel = 1
 Nsteps = Naccel*2 + Ncruise
 vcruise = 0.45 # cruising speed, always fixed
 # linear increase deltavel = vcruise/(Naccel+1)
 # constraint v[i=1..Naccel] = deltavel*i
 deltavel = vcruise / (Naccel+1)
 velstart = [deltavel*i for i in 1:Naccel]
-velcruise = [vcruise for i in 1:Ncruise+1]
+velcruise = [vcruise for i in 1:Ncruise]
 velend = [deltavel*(Naccel+1-i) for i in 1:Naccel]
 vels = [velstart; velcruise; velend]
 # constraint v[Naccel+1 ... Naccel+N] == vcruise
@@ -124,7 +124,8 @@ w = wstar
         (v,P,δ)->onestep(w,P=P,vm=v, δangle=δ).vm, autodiff=true) # output vm
     #register(optsteps, :onestept, 3, # time after a step
     #    (v,P,δ)->onestep(w,P=P,vm=v, δangle=δ).tf, autodiff=true)
-    for i = 1:Nsteps  # step dynamics
+    #@NLconstraint(optsteps, vels[])
+    for i = 1:Nsteps-1  # step dynamics
         @NLconstraint(optsteps, vels[i+1]==onestepv(vels[i],P[i],0.)) # put delta here
     end
 
@@ -139,3 +140,13 @@ w = wstar
     end
     #return multistep(Walk(w,vm=value(v[1])), value.(P), δ, value(v[1]), boundaryvels,
     #    extracost = boundarywork ? 1/2*(value(v[1])^2 - boundaryvels[1]^2) : 0) #, optimal_solution
+
+
+# verify with multistep
+results=multistep(wstar, Ps=optimal_solution, boundaryvels=(0.,0.))
+multistepplot(results)
+
+# If you just want to do square wave in speed, it costs a lot of initial push-off
+# so let's compare with walking the same number of steps and same amount of time
+betterresults=optwalk(w, 3, boundaryvels=(0,0),boundarywork=true, totaltime=results.totaltime  )
+multistepplot!(betterresults)
