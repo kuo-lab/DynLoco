@@ -90,7 +90,7 @@ boundarywork = true
 
 
 Ncruise = 3
-Naccel = 1
+Naccel = 0
 Nsteps = Naccel*2 + Ncruise
 vcruise = 0.45 # cruising speed, always fixed
 # linear increase deltavel = vcruise/(Naccel+1)
@@ -140,13 +140,15 @@ w = wstar
     end
     #return multistep(Walk(w,vm=value(v[1])), value.(P), δ, value(v[1]), boundaryvels,
     #    extracost = boundarywork ? 1/2*(value(v[1])^2 - boundaryvels[1]^2) : 0) #, optimal_solution
-
+    squarewaveresults=multistep(Walk(w,vm=vels[1]), Ps=optimal_solution, boundaryvels=(0.,0.),
+        extracost = boundarywork ? 1/2*(vels[1]^2 - boundaryvels[1]^2) : 0)
 
 # verify with multistep
-results=multistep(wstar, Ps=optimal_solution, boundaryvels=(0.,0.))
-multistepplot(results)
+multistepplot(squarewaveresults,plotwork=true)
 
 # If you just want to do square wave in speed, it costs a lot of initial push-off
 # so let's compare with walking the same number of steps and same amount of time
-betterresults=optwalk(w, 3, boundaryvels=(0,0),boundarywork=true, totaltime=results.totaltime  )
-multistepplot!(betterresults)
+optresults=optwalk(w, 3, boundaryvels=(0,0),boundarywork=true, totaltime=results.totaltime  )
+multistepplot!(optresults,plotwork=true)
+println("square wave cost = ", squarewaveresults.totalcost, "   optimal cost = ", optresults.totalcost)
+# It's definitely more expensive to use the square wave

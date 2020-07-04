@@ -64,6 +64,42 @@ struct StepResults
     δ          # slope
 end
 
+function Base.show(io::IO, w::Walk)
+    print(io, "Walk: ")
+    for (i,field) in enumerate(fieldnames(Walk))
+        print(io, "$field = $(getfield(w, field))")
+        if i < length(fieldnames(Walk))
+            print(io, ", ")
+        else
+            println(io)
+        end
+    end
+end
+
+
+function Base.show(io::IO, s::StepResults)
+    print(io, "StepResults: ")
+    for (i,field) in enumerate(fieldnames(StepResults))
+        print(io, "$field = $(getfield(s, field))")
+        if i < length(fieldnames(StepResults))
+            print(io, ", ")
+        else
+            println(io)
+        end
+    end
+end
+
+function Base.show(io::IO, s::MultiStepResults)
+    print(io, "MultiStepResults: ")
+    for (i,field) in enumerate(fieldnames(MultiStepResults))
+        print(io, "$field = $(getfield(s, field))")
+        if i < length(fieldnames(MultiStepResults))
+            print(io, ", ")
+        else
+            println(io)
+        end
+    end
+end
 
 """
     msr = MultiStepResults(steps, totalcost, totaltime, vm0, δangles, boundaryvels)
@@ -280,7 +316,7 @@ multistepplot
 
 @userplot MultiStepPlot
 
-@recipe function f(h::MultiStepPlot; plotwork=false)
+@recipe function f(h::MultiStepPlot; plotwork=false, boundarywork=true)
 
     markershape --> :circle
 
@@ -307,7 +343,7 @@ multistepplot
                            Pplot
                            δplot]
     end
-println("boundaryvels = ", boundaryvels)
+
     # vplot
     @series begin
         subplot := 1
@@ -327,7 +363,7 @@ println("boundaryvels = ", boundaryvels)
         ylims := (0, Inf)
         #xlims := (0.5, n+0.5)
         plotwork ? ([0.5; 1:n; n+0.5], [1/2*(v[1]^2-boundaryvels[1]^2); 1/2 .* P.^2; NaN]) :
-                   ([0.5;1:n;n+0.5], [v[1]-boundaryvels[1]; P; NaN])
+                   ([0.5;1:n;n+0.5], [v[1]-boundaryvels[1]; P; NaN]) # just plot the push-offs
     end
 
     if doslope

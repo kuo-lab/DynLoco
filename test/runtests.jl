@@ -36,7 +36,7 @@ using Test
     @test checkresult.totaltime ≈ sloperesult.totaltime # walk time should be equal
     @test sloperesult.steps.P ≈ checkresult.steps.P # push-offs should be equal
     @test sloperesult.steps.vm0 ≈ checkresult.steps.vm0 # mid-stance velocities should be equal
-    msr = multistep(wstar, sloperesult.steps.P, sloperesult.steps.δ, (0.,0.))
+    msr = multistep(wstar, sloperesult.steps.P, sloperesult.steps.δ, boundaryvels=(0.,0.))
     @test msr.steps.Pwork ≈ sloperesult.steps.Pwork
 
     # optwalktime

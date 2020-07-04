@@ -112,6 +112,7 @@ myout = optwalk(wstar, 6, boundaryvels = (0.1,0.1)) # walk 6 steps
 multistepplot(myout)
 myout = optwalk(wstar, 6, boundaryvels = (0.,0.), δ=[-0.1,0.,0.,0.,0.,0.1])
 multistepplot(myout)
+#optwalkslope
 myout1 = optwalkslope(wstar, 6, boundaryvels = (0., 0.), symmetric = true)
 multistepplot(myout1)
 myout2 = optwalk(wstar, 5, boundaryvels=(0.,0.), totaltime=myout1.totaltime,
