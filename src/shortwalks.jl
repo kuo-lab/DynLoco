@@ -5,14 +5,14 @@ using Plots
 # Take walks of varying distances, and show how the optimal trajectory is to have a bell-shaped
 # velocity profile, with peak speed that increases with distance up to about 12 steps.
 # The cost function is total work, plus a linear cost of time with coefficient ctime.
-wstar4 = findgait(Walk(α=0.35), target=:speed=>0.3, varying=:P)
+wstar4 = findgait(WalkRW2l(α=0.35), target=:speed=>0.3, varying=:P)
 ctime = 0.02 # cost of time, to encourage hurrying
 p = plot()
 walksteps = [2, 3, 4, 5, 7, 10, 15, 20] # take walks of this # of steps
 results = Array{MultiStepResults,1}(undef,0) # store each optimization result here
 for (i,nsteps) in enumerate(walksteps)
     result = optwalktime(wstar4, nsteps, ctime=ctime) # optimize with a cost of time
-    plotvees!(result, tchange=0.5, color=i) # plot instantaneous speed vs. time
+    plotvees!(result, tchange=1, color=i, rampuporder=1) # plot instantaneous speed vs. time
     push!(results, result) # add this optimization to results array
 end
 Plots.display(p) # instantaneous speed vs. distance profiles
@@ -58,7 +58,7 @@ Plots.display(p)
 # The steeper, the more skewed the speed profile
 
 # Make plots comparing up, level, down for various numbers of steps
-wstar4s = findgait(Walk(α=0.4,safety=true), target=:speed=>0.4, varying=:P)
+wstar4s = findgait(WalkRW2l(α=0.4,safety=true), target=:speed=>0.4, varying=:P)
 myslopes = 0:0.02:0.08
 p = plot(layout=(2,1))
 nsteps = 6
@@ -89,7 +89,7 @@ p = plot()
 results = Array{MultiStepResults,1}(undef,0) # store each optimization result here
 for (i,α) in enumerate(αs)
     nsteps = Int(round(totaldistance/steplengths[i]))
-    w = findgait(Walk(wstar4,α=α,safety=true), target=:stepfrequency=>stepfreq, varying=:P)
+    w = findgait(WalkRW2l(wstar4,α=α,safety=true), target=:stepfrequency=>stepfreq, varying=:P)
     result = optwalktime(w, nsteps, ctime=ctime) # optimize with a cost of time
     plotvees!(result, tchange=0.05, color=i) # plot instantaneous speed vs. time
     push!(results, result) # add this optimization to results array
@@ -122,7 +122,7 @@ vels = [velstart; velcruise; velend]
 # constraint v[Naccel+1 ... Naccel+N] == vcruise
 # constraint v[Naccel+N+(1..Naccel)] == deltavel*(Naccel+1-i)
 # solve for P that produces it, time will be an outcome
-w = Walk(wstar4, safety=true)
+w = WalkRW2l(wstar4, safety=true)
 optsteps = Model(optimizer_with_attributes(Ipopt.Optimizer, "print_level"=>0))
 @variable(optsteps, P[1:Nsteps]>=0, start=w.P) # JuMP variables P
 
@@ -141,7 +141,7 @@ else
     error("The model was not solved correctly.")
     println(termination_status(optsteps))
 end
-trapezoidresults=multistep(Walk(w,vm=vels[1]), Ps=optimal_solution, boundaryvels=(0.,0.),
+trapezoidresults=multistep(WalkRW2l(w,vm=vels[1]), Ps=optimal_solution, boundaryvels=(0.,0.),
     extracost = 1/2*(vels[1]^2 - boundaryvels[1]^2) )
 
 # verify with multistep
@@ -157,7 +157,7 @@ multistepplot!(optresults,plotwork=true,label="optimal")
 ## Brachistokuo Ramp
 # Optimal slope and walk with ramp
 # Compare walking ramp and flat in same amount of time, for three different times
-wstar = findgait(Walk(wstar4,safety=true), target=:speed=>0.4, varying=:P)
+wstar = findgait(WalkRW2l(α=0.4,safety=true), target=:speed=>0.4, varying=:P)
 N = 6
 walktime = N * onestep(wstar).tf *0.82 # meant to be a brisk walk
 walkdistance = N * onestep(wstar).steplength
@@ -167,8 +167,8 @@ p = multistepplot(rampresult; plotwork=true, label="ramp")
 println("ramp total cost = ", rampresult.totalcost)
 flatresult = optwalk(wstar, N, boundaryvels = (0., 0.),
     totaltime = rampresult.totaltime, δ = zeros(6))
-multistepplot!(flatresult; plotwork=true, label="flat")
 println("flat total cost = ", flatresult.totalcost)
+multistepplot!(flatresult; plotwork=true, label="flat")
 # optionally, try a reversed ramp and see if it's higher cost still
 #concaveresult = optwalk(wstar, 6, boundaryvels = (0.,0.), boundarywork=true,
 #    totaltime = rampresult.totaltime, δ = -rampresult.δangles)
@@ -189,5 +189,5 @@ plot(walkdistance ./ walktimes, [getfield.(rampresults, :totalcost), getfield.(f
     xlabel="Average speed", ylabel="Total Work", labels=["Ramp" "Flat"])
 
 ## Brachistokuo ramp: Plot the ramp to scale
-plot(onestep(wstar).steplength .* (0:6),tan.(cumsum([0;rampresult.δangles])).*onestep(wstar).steplength,
+plot(onestep(wstar).steplength .* (0:6),cumsum(tan.([0;rampresult.δangles]).*onestep(wstar).steplength),
     aspect_ratio=1)

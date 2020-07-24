@@ -2,11 +2,11 @@ using DynLoco
 using Test
 
 @testset "DynLoco.jl" begin
-    wrw = Walk(P=0.15, vm = 0.38)
-    @test typeof(wrw) == Walk # basic constructor for Walk
+    wrw = WalkRW2l(P=0.15, vm = 0.38)
+    @test typeof(wrw) == WalkRW2l # basic constructor for Walk
 
     wstar = findgait(wrw, target=:speed=>0.4, varying=:P) # constraint solver
-    @test typeof(wstar) == Walk
+    @test typeof(wstar) == WalkRW2l
 
     @test typeof(onestep(wrw)) <: NamedTuple # onestep returns a named tuple
 
