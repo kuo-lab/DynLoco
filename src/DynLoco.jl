@@ -5,7 +5,7 @@ module DynLoco
 using Parameters #, DifferentialEquations
 using JuMP, Ipopt, Plots, Setfield
 using StructArrays
-using Dierckx
+using Dierckx # spline package
 
 export Walk, Parms, onestep
 export findgait
@@ -31,7 +31,7 @@ keyword arguments.
     safety = false # model falls backward if not enough momentum
 end
 
-export StepResults
+export StepResults, MultiStepResults
 
 """
     steps = StepResults(vm, θnew, tf, P, C, Pwork, Cwork, speed, steplength,
@@ -47,28 +47,29 @@ angular velocities of model before and after s2s.
 or by field name `steps.tf` (an array of step times).
 """
 struct StepResults
-    vm
-    θnew
-    tf
+    vm    # mid-stance velocity after s2s transition
+    θnew  # angle of new stance leg after s2s transition (+ccw from vertical)
+    tf    # step time (mid-stance to mid-stance)
     P
     C
     Pwork
     Cwork
     speed
     steplength
+    stepfrequency
     tf1
     tf2
     Ωminus
     Ωplus
     vm0    # middle-stance velocity at start of step
-    δ          # slope
+    δ      # slope wrt horizontal
 end
 
-function Base.show(io::IO, w::Walk)
-    print(io, "Walk: ")
-    for (i,field) in enumerate(fieldnames(Walk))
+function Base.show(io::IO, w::W) where W <: Walk
+    print(io, W, ": ")
+    for (i,field) in enumerate(fieldnames(W))
         print(io, "$field = $(getfield(w, field))")
-        if i < length(fieldnames(Walk))
+        if i < length(fieldnames(W))
             print(io, ", ")
         else
             println(io)
@@ -183,7 +184,8 @@ function onestep(w::Walk; vm=w.vm, P=w.P, δangle = 0.,
     tf = tf1 + tf2 # total time mid-stance to mid-stance
     speed = steplength / tf # average speed mid-stance to mid-stance
     return (vm=vmnew, θnew=θnew, tf=tf, P=P, C=C, Pwork=Pwork,Cwork=Cwork,
-        speed=speed, steplength=steplength, tf1=tf1, tf2=tf2,Ωminus=Ωminus,Ωplus=Ωplus,
+        speed=speed, steplength=steplength, stepfrequency=speed/steplength,tf1=tf1, tf2=tf2,
+        Ωminus=Ωminus,Ωplus=Ωplus,
         vm0=vm,δ=δangle)
 end
 
@@ -293,6 +295,7 @@ function multistep(w::Walk, Ps::AbstractArray, δangles=zeros(length(Ps)); vm0 =
         w = Walk(w, vm=steps[i].vm)
     end
     totalcost = sum(steps[i].Pwork for i in 1:length(Ps)) + extracost
+    # 1/2 (v[1]^2-boundaryvels[1]^2)
     totaltime = sum(getfield.(steps,:tf))
     finalvm = w.vm
     return MultiStepResults(steps, totalcost, totaltime, vm0, δangles, boundaryvels)
@@ -332,7 +335,7 @@ multistepplot
     n = length(msr.steps) # how many steps
 
     # set up the subplots: v, P, slopes
-    legend := false
+    #legend := false
     #link := :both
     grid := false
     if !doslope
@@ -529,26 +532,30 @@ plotvees(results::MultiStepResults; veeparms...) = plotvees!(plot(), results; ve
 "plotvees!([p,] results::MultiStepResults) adds to an existing plot."
 plotvees!(results::MultiStepResults; veeparms...) = plotvees!(Plots.CURRENT_PLOT.nullableplot, results; veeparms...)
 
-function plotvees!(p::Plots.Plot, msr::MultiStepResults; tchange = 3, boundaryvels = (0.,0.),
-    color = :auto, usespline=true)
-    v = [msr.vm0; msr.steps.vm] # vm0 is the speed at first step
+function plotvees!(p::Union{Plots.Plot,Plots.Subplot}, msr::MultiStepResults; tchange = 3, boundaryvels = (0.,0.),
+    color = :auto, usespline=true, rampuporder = 2, plotoptions...)
+    v = [msr.vm0; msr.steps.vm] # vm0 is the speed at beginning of first step, vm is the mid-stance speed of first step
     n = length(msr.steps)
     times = cumsum([tchange; msr.steps.tf]) # add up step times, starting from ramp-up
     # make smooth ramp-up in speed
     t0 = range(0, tchange, length=10)
-    vstart = v[1]*(t0/tchange).^2
-    vend = v[n+1]*(1 .- t0/tchange).^2 # ramp-down in speed
-    # make a smooth spline from discrete velocities
-    k = length(v) <= 3 ? length(v)-1 : 3
-    if usespline
-        spline = Spline1D(times, v; k=k)
-        tspline = range(times[1], times[end], length=50)
-        plot!(p,[t0; tspline; t0 .+ times[end]], [vstart; spline.(tspline); vend], color=color)
+    vstart = v[1]*(t0/tchange).^rampuporder      # ramp-up in speed, using a quadratic for now
+    vend = v[n+1]*(1 .- t0/tchange).^rampuporder # ramp-down in speed
+    if usespline     # make a smooth spline from discrete velocities
+        k = 2 # spline order
+        if length(v) > 2 # enough points to make splines from v alone
+            spline = Spline1D(times, v; k=k)
+        else # only say 1 point, so let's pad v with the ramp-up ramp-down
+            spline = Spline1D([t0[1]; times; t0[end]+times[end]],
+                [vstart[1]; v; vend[end]], k=k)
+        end
+        tspline = range(times[1], times[end], length=20)
+        plot!(p,[t0; tspline; t0 .+ times[end]], [vstart; spline.(tspline); vend], color=color;
+            plotoptions...)
     end
     plot!(p, times, v, seriestype=:scatter, legend=:none, color=color, # dots for discrete velocities
-        xlabel="time", ylabel="speed")
+        xlabel="time", ylabel="speed"; plotoptions...)
 end
-
 
 
 using JuMP, Ipopt
@@ -567,17 +574,21 @@ final speeds, default nominal middle-stance speed `vm`. To start and end at rest
 `boundarywork = true` whether cost includes the work needed to
 start and end from `boundaryvels`. `symmetric = false` whether to enforce fore-aft symmetry in
 the slope profile. `totaltime` is the total time to take the steps, by default the same
-time expected of the nominal `w` on level ground.
+time expected of the nominal `w` on level ground. `startv` initial guess at speeds.
 
 See also `optwalk` and `optwalkslope`
 """
 function optwalktime(w::Walk, nsteps=5; boundaryvels::Union{Tuple,Nothing} = (0.,0.), safety=true,
-    ctime = 0.05, tchange = 3., boundarywork = true, δs = zeros(nsteps), walkparms...)
+    ctime = 0.05, tchange = 3., boundarywork = true, δs = zeros(nsteps), startv = w.vm, walkparms...)
     w = Walk(w; walkparms...)
     optsteps = Model(optimizer_with_attributes(Ipopt.Optimizer, "print_level"=>1))
     @variable(optsteps, P[1:nsteps]>=0, start=w.P) # JuMP variables P
     # constraints: start
-    @variable(optsteps, v[1:nsteps+1]>=0, start=w.vm)
+    if length(startv) == 1
+        @variable(optsteps, v[1:nsteps+1]>=0, start=startv)
+    else # starting guess for v is an array
+        @variable(optsteps, v[i=1:nsteps+1]>=0, start=startv[i])
+    end
     register(optsteps, :onestepv, 3, (v,P,δ)->onestep(w,P=P,vm=v,δangle=δ,safety=safety).vm, autodiff=true) # input P, output vm
     register(optsteps, :onestept, 3, (v,P,δ)->onestep(w,P=P,vm=v,δangle=δ,safety=safety).tf, autodiff=true)
     @NLexpression(optsteps, steptime[i=1:nsteps], onestept(v[i],P[i],δs[i]))
