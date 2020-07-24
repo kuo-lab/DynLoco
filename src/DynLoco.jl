@@ -7,18 +7,26 @@ using JuMP, Ipopt, Plots, Setfield
 using StructArrays
 using Dierckx # spline package
 
-export Walk, Parms, onestep
+export Walk, AbstractWalkRW2, WalkRW2l, Parms, onestep
 export findgait
 
-"""
-    w = Walk(vm, P, α, γ, L, M, g, parms, limitcycle)
+abstract type Walk end
+abstract type AbstractWalkRW2 <: Walk end
 
-Struct containing model parameters. Parameter values can be overridden with
-`Walk(w, α=0.35)` which produces a new model like `w` except with a new
-value for `alpha`. Similarly any parameter may be replaced using named
-keyword arguments.
 """
-@with_kw struct Walk
+    w = WalkRW2l(vm, P, α, γ, L, M, g, parms, limitcycle)
+
+Rimless wheel in 2D, linearized. Struct containing model parameters. Parameter values can be
+overridden with `WalkRW2l(w, α=0.35)` which produces a new model like `w` except with a new
+value for `alpha`. Similarly any parameter may be replaced using named
+keyword arguments. State: mid-stance speed `vm`. Control: Push-off impulse `P`.
+
+`parms` is a list of numerical model parameters.
+`limitcycle` is a named tuple with f, a function whose root is a fixed point.
+`safety` (logical) prevents model from falling backwards, rather it always moves forward,
+albeit very slowly if given insufficient forward speed.
+"""
+@with_kw struct WalkRW2l <: AbstractWalkRW2
     vm = 0.35 # initial mid-stance velocity (stance leg upright)
     P = 0.1   # push-off impulse (mass-normalized, units of Δv)
     α = 0.3 # angle between legs
@@ -90,17 +98,6 @@ function Base.show(io::IO, s::StepResults)
     end
 end
 
-function Base.show(io::IO, s::MultiStepResults)
-    print(io, "MultiStepResults: ")
-    for (i,field) in enumerate(fieldnames(MultiStepResults))
-        print(io, "$field = $(getfield(s, field))")
-        if i < length(fieldnames(MultiStepResults))
-            print(io, ", ")
-        else
-            println(io)
-        end
-    end
-end
 
 """
     msr = MultiStepResults(steps, totalcost, totaltime, vm0, δangles, boundaryvels)
@@ -120,6 +117,19 @@ end
 
 export MultiStepResults
 
+
+function Base.show(io::IO, s::MultiStepResults)
+    print(io, "MultiStepResults: ")
+    for (i,field) in enumerate(fieldnames(MultiStepResults))
+        print(io, "$field = $(getfield(s, field))")
+        if i < length(fieldnames(MultiStepResults))
+            print(io, ", ")
+        else
+            println(io)
+        end
+    end
+end
+
 getfields(w::Walk, fields) = map(f->getfield(w,f), fields)
 
 """
@@ -134,7 +144,7 @@ Set `safety=true` to prevent step from blowing up if stance leg has too little
 momentum to reach middle stance. A step will be returned with very long
 step time, and very slow mid-stance velocity.
 """
-function onestep(w::Walk; vm=w.vm, P=w.P, δangle = 0.,
+function onestep(w::WalkRW2l; vm=w.vm, P=w.P, δangle = 0.,
     α=w.α, γ=w.γ,g=w.g,L=w.L,safety=w.safety)
     mylog = safety ? logshave : log # logshave doesn't blow up on negative numbers
     # Start at mid-stance leg vertical, and find the time tf1
@@ -207,11 +217,11 @@ a desired speed of 0.4.
 Note that `target` and `varying` may be singletons of tuples, with each
 referring to a parameter symbol. Other parameters are set as equalities.
 """
-function findgait(w::Walk; target=(), varying=(), walkparms...)
+function findgait(w::W; target=(), varying=(), walkparms...) where W <: Walk
     if target isa Tuple{Vararg{Pair}} && varying isa Tuple
-        return findgait(Walk(w, walkparms), target, varying)
+        return findgait(W(w, walkparms), target, varying)
     elseif target isa Pair && varying isa Symbol
-        return findgait(Walk(w, walkparms), (target,), (varying,))
+        return findgait(W(w, walkparms), (target,), (varying,))
     else
         error("findgait unable to parse target and varying")
     end
@@ -220,7 +230,7 @@ end
 # target=(:speed=>0.4, :steptime=0.6), varying=(:P, :Kp)
 
 # Non-keyword form, with ordered arguments: w, target, varying
-function findgait(w::Walk, target::Tuple{Vararg{Pair}}, varying::Tuple)
+function findgait(w::W, target::Tuple{Vararg{Pair}}, varying::Tuple) where W <: Walk
     # target = (:speed=>0.4, ) or even nothing--there's a function related to this
     # varying = (:P, :α) a tuple of symbols representing model parameters
     varying = (varying..., w.limitcycle.parms...)   # we always add vm as a limit cycle variable
@@ -264,7 +274,7 @@ function findgait(w::Walk, target::Tuple{Vararg{Pair}}, varying::Tuple)
     end
     # produce a new Walk struct
     assignedoptimalparms = (; zip(varying, optimal_solution)...) # P = 0.17, etc.
-    return Walk(w; assignedoptimalparms...)
+    return W(w; assignedoptimalparms...)
 end
 
 """
@@ -282,17 +292,17 @@ where slope angles `δangles` (default level ground), `vm0` initial mid-stance v
 `boundaryvels` boundary velocities, `extracost` added onto push-off work, and `walkparms`
 can be used to apply model parameters such as `α`, `γ`, `M`, etc.
 """
-function multistep(w::Walk; Ps=w.P*ones(5), δangles=zeros(length(Ps)), vm0 = w.vm, extracost = 0,
-    boundaryvels=(), walkparms...)
-    return multistep(Walk(w; walkparms...), Ps, δangles, boundaryvels=boundaryvels, extracost = extracost)
+function multistep(w::W; Ps=w.P*ones(5), δangles=zeros(length(Ps)), vm0 = w.vm, extracost = 0,
+    boundaryvels=(), walkparms...) where W <: Walk
+    return multistep(W(w; walkparms...), Ps, δangles, boundaryvels=boundaryvels, extracost = extracost)
 end
 
-function multistep(w::Walk, Ps::AbstractArray, δangles=zeros(length(Ps)); vm0 = w.vm,
-    boundaryvels=(), extracost = 0)
+function multistep(w::W, Ps::AbstractArray, δangles=zeros(length(Ps)); vm0 = w.vm,
+    boundaryvels=(), extracost = 0) where W <: Walk
     steps = StructArray{StepResults}(undef, length(Ps))
     for i in 1:length(Ps)
         steps[i] = StepResults(onestep(w, P=Ps[i], δangle=δangles[i])...)
-        w = Walk(w, vm=steps[i].vm)
+        w = W(w, vm=steps[i].vm)
     end
     totalcost = sum(steps[i].Pwork for i in 1:length(Ps)) + extracost
     # 1/2 (v[1]^2-boundaryvels[1]^2)
@@ -397,9 +407,9 @@ the same time expected of the nominal `w` on level ground.
 
 See also `optwalkslope`
 """
-function optwalk(w::Walk, numsteps=5; boundaryvels::Union{Tuple,Nothing} = nothing,
+function optwalk(w::W, numsteps=5; boundaryvels::Union{Tuple,Nothing} = nothing,
     boundarywork = true, totaltime=numsteps*onestep(w).tf,
-    δ = zeros(numsteps)) # default to taking the time of regular steady walking
+    δ = zeros(numsteps)) where W <: Walk # default to taking the time of regular steady walking
 
     optsteps = Model(optimizer_with_attributes(Ipopt.Optimizer, "print_level"=>0))
     @variable(optsteps, P[1:numsteps]>=0, start=w.P) # JuMP variables P
@@ -439,12 +449,12 @@ function optwalk(w::Walk, numsteps=5; boundaryvels::Union{Tuple,Nothing} = nothi
         error("The model was not solved correctly.")
         println(termination_status(optsteps))
     end
-    return multistep(Walk(w,vm=value(v[1])), value.(P), δ, vm0=value(v[1]), boundaryvels=boundaryvels,
+    return multistep(W(w,vm=value(v[1])), value.(P), δ, vm0=value(v[1]), boundaryvels=boundaryvels,
         extracost = boundarywork ? 1/2*(value(v[1])^2 - boundaryvels[1]^2) : 0) #, optimal_solution
 end
 
 """
-    optwalkslope(w::Walk, numsteps=5)
+    optwalkslope(w<:Walk, numsteps=5)
 
 Optimizes push-offs and terrain profile to walk `numsteps` steps. Returns a `MultiStepResults`
 struct. Optional keyword arguments: `boundaryvels = (vm,vm)` can specify a tuple of initial and
@@ -456,9 +466,9 @@ time expected of the nominal `w` on level ground.
 
 See also `optwalk`
 """
-function optwalkslope(w::Walk, numsteps=5; boundaryvels::Union{Tuple,Nothing} = nothing,
+function optwalkslope(w::W, numsteps=5; boundaryvels::Union{Tuple,Nothing} = nothing,
     boundarywork = true, symmetric=false,
-    totaltime=numsteps*onestep(w).tf) # default to taking the time of regular steady walking
+    totaltime=numsteps*onestep(w).tf) where W <: Walk # default to taking the time of regular steady walking
     optsteps = Model(optimizer_with_attributes(Ipopt.Optimizer, "print_level"=>0))
     @variable(optsteps, P[1:numsteps]>=0, start=w.P) # JuMP variables P
     @variable(optsteps, δ[1:numsteps], start=0.)         # delta slope
@@ -509,7 +519,7 @@ function optwalkslope(w::Walk, numsteps=5; boundaryvels::Union{Tuple,Nothing} = 
         error("The model was not solved correctly.")
         println(termination_status(optsteps))
     end
-    return multistep(Walk(w,vm=value(v[1])), value.(P), value.(δ), vm0=value(v[1]),
+    return multistep(W(w,vm=value(v[1])), value.(P), value.(δ), vm0=value(v[1]),
         boundaryvels = boundaryvels,
         extracost = boundarywork ? 1/2*(value(v[1])^2-boundaryvels[1]^2) : 0)
 end
@@ -562,7 +572,7 @@ using JuMP, Ipopt
 export optwalktime
 # ctime is the cost of time
 """
-    optwalktime(w::Walk, numsteps=5)
+    optwalktime(w::WalkrW2l, numsteps=5)
 
 Optimizes push-offs to walk `numsteps` steps in minimum work and time. Returns a `MultiStepResults`
 struct. Optional keyword arguments: `δ` array of slopes for uneven terrain. `ctime` is the relative
@@ -578,9 +588,9 @@ time expected of the nominal `w` on level ground. `startv` initial guess at spee
 
 See also `optwalk` and `optwalkslope`
 """
-function optwalktime(w::Walk, nsteps=5; boundaryvels::Union{Tuple,Nothing} = (0.,0.), safety=true,
-    ctime = 0.05, tchange = 3., boundarywork = true, δs = zeros(nsteps), startv = w.vm, walkparms...)
-    w = Walk(w; walkparms...)
+function optwalktime(w::W, nsteps=5; boundaryvels::Union{Tuple,Nothing} = (0.,0.), safety=true,
+    ctime = 0.05, tchange = 3., boundarywork = true, δs = zeros(nsteps), startv = w.vm, walkparms...) where W <: Walk
+    w = W(w; walkparms...)
     optsteps = Model(optimizer_with_attributes(Ipopt.Optimizer, "print_level"=>1))
     @variable(optsteps, P[1:nsteps]>=0, start=w.P) # JuMP variables P
     # constraints: start
@@ -604,7 +614,7 @@ function optwalktime(w::Walk, nsteps=5; boundaryvels::Union{Tuple,Nothing} = (0.
             ctime*totaltime)
     end
     optimize!(optsteps)
-    result = multistep(Walk(w,vm=value(v[1]),safety=safety), value.(P), δs, vm0=value(v[1]),
+    result = multistep(W(w,vm=value(v[1]),safety=safety), value.(P), δs, vm0=value(v[1]),
         boundaryvels=boundaryvels, extracost = ctime*value(totaltime) +
         (boundarywork ? 1/2*(value(v[1])^2-boundaryvels[1]^2) : 0))
     return result
@@ -612,7 +622,7 @@ end
 
 export islimitcycle
 """
-    islimitcycle(w::Walk)
+    islimitcycle(w<:Walk)
 
 Checks whether `w` is a limit cycle, i.e. taking one step
 returns nearly the same gait conditions for the next step.
