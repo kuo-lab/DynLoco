@@ -7,12 +7,13 @@ using Plots
 # The cost function is total work, plus a linear cost of time with coefficient ctime.
 wstar4 = findgait(WalkRW2l(α=0.35), target=:speed=>0.3, varying=:P)
 ctime = 0.02 # cost of time, to encourage hurrying
+tchange = 1
 p = plot()
 walksteps = [2, 3, 4, 5, 7, 10, 15, 20] # take walks of this # of steps
 results = Array{MultiStepResults,1}(undef,0) # store each optimization result here
 for (i,nsteps) in enumerate(walksteps)
     result = optwalktime(wstar4, nsteps, ctime=ctime) # optimize with a cost of time
-    plotvees!(result, tchange=1, color=i, rampuporder=1) # plot instantaneous speed vs. time
+    plotvees!(result, tchange=tchange, color=i, rampuporder=1) # plot instantaneous speed vs. time
     push!(results, result) # add this optimization to results array
 end
 Plots.display(p) # instantaneous speed vs. distance profiles
@@ -26,7 +27,7 @@ plot(p1, p2, layout = (1,2), legend=false)
 
 ## Short walks: Time to walk a distance
 # A fairly linear increase in time to walk a distance, but with a slight curved toe-in
-timetowalk = [result.totaltime+4 for result in results]
+timetowalk = [result.totaltime+2*tchange for result in results]
 plot(distances, timetowalk, xlims=(0,Inf), ylims=(0,Inf),
     xlabel="Distance", ylabel="Time", title="Time to walk a distance", label=nothing)
 
@@ -38,19 +39,20 @@ plot(distances, timetowalk, xlims=(0,Inf), ylims=(0,Inf),
 # `optwalktime` is an optimization for a given number of steps, with a `ctime` cost.
 
 # Make plots comparing up, level, down for various numbers of steps
+wstar4s = findgait(WalkRW2l(α=0.4,safety=true), target=:speed=>0.4, varying=:P)
 myslope = 0.08
 p = plot(layout=(3,1))
 for (i,nsteps) = enumerate([5, 10, 15])
-    resultlevel = optwalktime(wstar4, nsteps, ctime = ctime)
-    plotvees!(p[1],resultlevel, tchange=0.05, title="Level") # special function to include ramp-up in speed
+    resultlevel = optwalktime(wstar4s, nsteps, ctime = ctime)
+    plotvees!(p[1],resultlevel, tchange=tchange, title="Level", rampuporder=1) # special function to include ramp-up in speed
 
     # walk up a 10% slope
-    resultup = optwalktime(wstar4, nsteps, ctime = ctime, δs=fill(myslope, nsteps))
-    plotvees!(p[2],resultup, tchange=0.05, title="Up")
+    resultup = optwalktime(wstar4s, nsteps, ctime = ctime, δs=fill(myslope, nsteps))
+    plotvees!(p[2],resultup, tchange=tchange, title="Up", rampuporder=1)
 
     # Walk down a slope
-    resultdown = optwalktime(wstar4, nsteps, ctime = ctime, δs=fill(-myslope, nsteps))
-    plotvees!(p[3],resultdown, tchange=0.05, title="Down")
+    resultdown = optwalktime(wstar4s, nsteps, ctime = ctime, δs=fill(-myslope, nsteps))
+    plotvees!(p[3],resultdown, tchange=1, title="Down", rampuporder=1)
 end
 Plots.display(p)
 
@@ -66,12 +68,12 @@ startv = wstar4.vm
 for slope in myslopes
     # walk up a slope
     resultup = optwalktime(wstar4s, nsteps, ctime = ctime, δs=fill(slope, nsteps))
-    plotvees!(p[1],resultup, tchange=0.05, title="Up")
+    plotvees!(p[1],resultup, tchange=1, title="Up", rampuporder=1)
     startv = [resultup.vm0;resultup.steps.vm]
 
     # Walk down a slope
     resultdown = optwalktime(wstar4s, nsteps, ctime = ctime, δs=fill(-slope, nsteps))
-    plotvees!(p[2],resultdown, tchange=0.05, title="Down")
+    plotvees!(p[2],resultdown, tchange=1, title="Down", rampuporder=1)
 end
 Plots.display(p)
 
@@ -91,7 +93,7 @@ for (i,α) in enumerate(αs)
     nsteps = Int(round(totaldistance/steplengths[i]))
     w = findgait(WalkRW2l(wstar4,α=α,safety=true), target=:stepfrequency=>stepfreq, varying=:P)
     result = optwalktime(w, nsteps, ctime=ctime) # optimize with a cost of time
-    plotvees!(result, tchange=0.05, color=i) # plot instantaneous speed vs. time
+    plotvees!(result, tchange=1, color=i, rampuporder=1) # plot instantaneous speed vs. time
     push!(results, result) # add this optimization to results array
 end
 Plots.display(p) # instantaneous speed vs. distance profiles
