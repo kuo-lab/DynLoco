@@ -29,7 +29,7 @@ plot(p1, p2, layout = (1,2), legend=false)
 # A fairly linear increase in time to walk a distance, but with a slight curved toe-in
 timetowalk = [result.totaltime+2*tchange for result in results]
 plot(distances, timetowalk, xlims=(0,Inf), ylims=(0,Inf),
-    xlabel="Distance", ylabel="Time", title="Time to walk a distance", label=nothing)
+    xguide="Distance", yguide="Time", title="Time to walk a distance", label=nothing)
 
 ## Short walks: Up and down slopes
 # Compare walking uphill, downhill, and level, for a fixed number of steps, and including
