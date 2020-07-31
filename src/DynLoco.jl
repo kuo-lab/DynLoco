@@ -360,7 +360,7 @@ multistepplot
     # vplot
     @series begin
         subplot := 1
-        ylabel := "V midstance"
+        yguide := "V midstance"
         ylims := (0, Inf)
         if boundaryvels == nothing || isempty(boundaryvels)
             0:n, v
@@ -372,7 +372,7 @@ multistepplot
     # Pplot or workplot, interleaved with step numbers, with
     @series begin
         subplot := 2
-        ylabel := plotwork ? "Work" : "P"
+        yguide := plotwork ? "Work" : "P"
         ylims := (0, Inf)
         #xlims := (0.5, n+0.5)
         plotwork ? ([0.5; 1:n; n+0.5], [1/2*(v[1]^2-boundaryvels[1]^2); 1/2 .* P.^2; NaN]) :
@@ -382,8 +382,8 @@ multistepplot
     if doslope
         @series begin
             subplot := 3
-            ylabel := "Terrain height"
-            xlabel := "Step number"
+            yguide := "Terrain height"
+            xguide := "Step number"
             0:n, cumsum([0.; δ])
         end
     end
@@ -564,7 +564,7 @@ function plotvees!(p::Union{Plots.Plot,Plots.Subplot}, msr::MultiStepResults; tc
             plotoptions...)
     end
     plot!(p, times, v, seriestype=:scatter, legend=:none, color=color, # dots for discrete velocities
-        xlabel="time", ylabel="speed"; plotoptions...)
+        xguide="time", yguide="speed"; plotoptions...)
 end
 
 
