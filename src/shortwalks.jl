@@ -1,5 +1,6 @@
 using DynLoco
 using Plots
+default(grid=false) # no grid on plots
 
 ## Short walks of different distances
 # Take walks of varying distances, and show how the optimal trajectory is to have a bell-shaped
@@ -9,11 +10,11 @@ wstar4 = findgait(WalkRW2l(α=0.35), target=:speed=>0.3, varying=:P)
 ctime = 0.02 # cost of time, to encourage hurrying
 tchange = 1
 p = plot()
-walksteps = [2, 3, 4, 5, 7, 10, 15, 20] # take walks of this # of steps
+walksteps = [2, 3, 4, 5, 6, 7, 10, 15, 20] # take walks of this # of steps
 results = Array{MultiStepResults,1}(undef,0) # store each optimization result here
 for (i,nsteps) in enumerate(walksteps)
     result = optwalktime(wstar4, nsteps, ctime=ctime) # optimize with a cost of time
-    plotvees!(result, tchange=tchange, color=i, rampuporder=1) # plot instantaneous speed vs. time
+    plotvees!(result, tchange=tchange, color=i, rampuporder=1, markersize=2) # plot instantaneous speed vs. time
     push!(results, result) # add this optimization to results array
 end
 Plots.display(p) # instantaneous speed vs. distance profiles
@@ -155,6 +156,17 @@ optresults=optwalk(w, Ncruise, boundaryvels=(0,0),totaltime=trapezoidresults.tot
 println("trapezoid cost = ", trapezoidresults.totalcost, "   optimal cost = ", optresults.totalcost)
 # It's definitely more expensive to use the square wave
 multistepplot!(optresults,plotwork=true,label="optimal")
+
+## Trajectory for short walks
+# a single step
+traj = trajectory(wstar4, results[3].steps[1])
+plot(traj[1], traj[3])
+trajs = trajectory(wstar4, results[3].steps)
+plot(trajs[1], trajs[4])
+trajectory(wstar4,results[3])
+
+
+
 
 ## Brachistokuo Ramp
 # Optimal slope and walk with ramp

@@ -362,7 +362,7 @@ multistepplot
         subplot := 1
         yguide := "V midstance"
         ylims := (0, Inf)
-        if boundaryvels == nothing || isempty(boundaryvels)
+        if boundaryvels === nothing || isempty(boundaryvels)
             0:n, v
         else
             [0; 0:n; n], [boundaryvels[1]; v; boundaryvels[2]]
@@ -415,7 +415,7 @@ function optwalk(w::W, numsteps=5; boundaryvels::Union{Tuple,Nothing} = nothing,
     @variable(optsteps, P[1:numsteps]>=0, start=w.P) # JuMP variables P
     @variable(optsteps, v[1:numsteps+1]>=0, start=w.vm) # mid-stance speeds
 
-    if boundaryvels == nothing || isempty(boundaryvels)
+    if boundaryvels === nothing || isempty(boundaryvels)
         boundaryvels = (w.vm, w.vm) # default to given gait if nothing specified
     end
 
@@ -475,7 +475,7 @@ function optwalkslope(w::W, numsteps=5; boundaryvels::Union{Tuple,Nothing} = not
     @constraint(optsteps, sum(δ[i] for i =1:numsteps) == 0.)  # zero height gain
     @variable(optsteps, v[1:numsteps+1]>=0, start=w.vm) # mid-stance speeds
 
-    if boundaryvels == nothing
+    if boundaryvels === nothing
         boundaryvels = (w.vm, w.vm) # default to given gait if nothing specified
     end
 
@@ -549,7 +549,7 @@ function plotvees!(p::Union{Plots.Plot,Plots.Subplot}, msr::MultiStepResults; tc
     times = cumsum([tchange; msr.steps.tf]) # add up step times, starting from ramp-up
     # make smooth ramp-up in speed
     t0 = range(0, tchange, length=10)
-    vstart = v[1]*(t0/tchange).^rampuporder      # ramp-up in speed, using a quadratic for now
+    vstart = v[1]*(t0/tchange).^rampuporder      # ramp-up in speed, monomial degree ramporder
     vend = v[n+1]*(1 .- t0/tchange).^rampuporder # ramp-down in speed
     if usespline     # make a smooth spline from discrete velocities
         k = 2 # spline order
