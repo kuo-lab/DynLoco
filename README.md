@@ -1,18 +1,16 @@
-# DynLoco optimization of dynamic locomotion
-# in Julia
+# DynLoco optimization of dynamic locomotion in Julia
 
 Uses JuMP optimization package with rimless wheel, demonstrating walking on a ramp or slope, and short walks.
 
 1. Install Julia, recommended also Jupyter notebook and/or Juno+Atom editing environment
 2. Install `DynLoco` as a package.
-  * If using command line (REPL), enter the package manager with "]" and enter 
+    * If using command line (REPL), enter the package manager with "]" and enter 
     ```
     develop https://bitbucket.org/hbcl/dynloco
     activate .
     ```
     Then use delete/backspace key to exit package manager.
-
-  * Or, if inside a notebook, do the following:
+    * Or, if inside a notebook, do the following:
     ```julia
     using Pkg
     Pkg.develop(PackageSpec(url="https://bitbucket.org/hbcl/dynloco"))
