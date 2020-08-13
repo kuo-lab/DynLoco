@@ -158,14 +158,6 @@ println("trapezoid cost = ", trapezoidresults.totalcost, "   optimal cost = ", o
 multistepplot!(optresults,plotwork=true,label="optimal")
 
 ## Trajectory for short walks
-# a single step
-traj = trajectory(wstar4, results[3].steps[1])
-plot(traj[1], traj[3])
-trajs = trajectory(wstar4, results[3].steps)
-plot(trajs[1], trajs[4])
-trajectory(wstar4,results[3])
-
-
 
 
 ## Brachistokuo Ramp
