@@ -28,3 +28,11 @@ Jupyter notebook, and run as cells. Or in REPL,
 
 4. Recommended Julia workflow with [`Revise.jl`](https://timholy.github.io/Revise.jl/stable/). You should develop code within Modules, and use `Revise` to automatically track modifications. This avoids issues with redefining functions within a single REPL session. To install, enter package manager with "]" and enter `add Revise` (then backspace/delete to exist package manager). It is helpful to start `Revise` from every Julia session. Do this by adding `using Revise` to your [`startup.jl`](https://timholy.github.io/Revise.jl/stable/config/#Using-Revise-by-default-1) file.
 
+5. Jupyter notebooks provide a fast, accessible interface for demos. Jupyter stands for Julia-Python-R, and requires Python. In package manager, `add IJulia`. Then in Julia REPL,
+    ```
+    using IJulia
+    notebook()
+    ```
+    If you already have a Python installation, you may prefer to install manually, e.g. using Conda. See [documentation](https://github.com/JuliaLang/IJulia.jl).
+    
+    Jupyter notebooks run in a browser, but a desktop app experience is also available, with [nteract](https://nteract.io/desktop).
