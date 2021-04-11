@@ -1,36 +1,146 @@
 using DynLoco
 using Plots
-default(grid=false) # no grid on plots
+plotlyjs() # Use this backend to preserve fonts on export to SVG or PDF
+default(grid=false, fontfamily="Helvetica") # no grid on plots
 
 ## Short walks of different distances
 # Take walks of varying distances, and show how the optimal trajectory is to have a bell-shaped
 # velocity profile, with peak speed that increases with distance up to about 12 steps.
 # The cost function is total work, plus a linear cost of time with coefficient ctime.
 wstar4 = findgait(WalkRW2l(α=0.35), target=:speed=>0.3, varying=:P)
-ctime = 0.02 # cost of time, to encourage hurrying
-tchange = 1
+ctime = 0.012 # cost of time, to encourage hurrying
+tchange = 2
 p = plot()
-walksteps = [2, 3, 4, 5, 6, 7, 10, 15, 20] # take walks of this # of steps
+walksteps = [1, 2, 3, 4, 5, 6, 7, 10, 15, 20] # take walks of this # of steps
 results = Array{MultiStepResults,1}(undef,0) # store each optimization result here
 for (i,nsteps) in enumerate(walksteps)
     result = optwalktime(wstar4, nsteps, ctime=ctime) # optimize with a cost of time
-    plotvees!(result, tchange=tchange, color=i, rampuporder=1, markersize=2) # plot instantaneous speed vs. time
+    plotvees!(result, tchange=tchange, usespline=true, color=i, rampuporder=1, markersize=2) # plot instantaneous speed vs. time
     push!(results, result) # add this optimization to results array
 end
 Plots.display(p) # instantaneous speed vs. distance profiles
+savefig(p, "shortwalks.svg")
+savefig(p, "shortwalks.pdf")
+
+## Temp stuff, a changing step length; seems to work!
+wstar4s = findgait(WalkRW2ls(α=0.35,safety=true), target=:speed=>0.3, varying=:P)
+ctime = 0.012 # cost of time, to encourage hurrying
+tchange = 2
+p = plot()
+walksteps = [1, 2, 3, 4, 5, 6, 7, 10, 15, 20] # take walks of this # of steps
+resultss = Array{MultiStepResults,1}(undef,0) # store each optimization result here
+for (i,nsteps) in enumerate(walksteps)
+    result = optwalktime(wstar4s, nsteps, ctime=ctime) # optimize with a cost of time
+    plotvees!(result, tchange=tchange, usespline=true, color=i, rampuporder=1, markersize=2) # plot instantaneous speed vs. time
+    push!(resultss, result) # add this optimization to results array
+end
+Plots.display(p) # instantaneous speed vs. distance profiles
+
+
+## Try plotting stride speeds
+
+function stridespeeds(steps)
+    steptimes = [steps.tf; tchange]
+    stepdistances = [steps.steplength; 0]
+    return cumsum([0;steptimes],dims=1), [0; stepdistances./steptimes]
+end
+
+# splinify
+using Dierckx
+function splinify(t, v; ramporder = 1, thresholds = (0.05,0.95))
+    if length(v) < 2 # enough points to make splines from v alone
+        error("not enough points")
+    end
+    spline = Spline1D(t, v; k=ramporder)
+    twhole = range(t[1], t[end], length=50)
+    vwhole = spline.(twhole)
+    tsteady = twhole[vwhole .>= thresholds[2]*maximum(vwhole)]
+    taccel = twhole[thresholds[1]*maximum(vwhole) .<= vwhole .< thresholds[2]*maximum(vwhole)]
+    tspeedup = taccel[taccel .< 0.5*twhole[end]]
+    tslowdown = taccel[taccel .>= 0.5*twhole[end]]
+    println(tspeedup[end]-tspeedup[1], " ", taccel[end]-taccel[1], " ", tslowdown[end]-tslowdown[1])
+    return tspeedup[end]-tspeedup[1], taccel[end]-taccel[1], tslowdown[end]-tslowdown[1]
+end
+
+# plot stride speeeds vs distance
+p = plot()
+Tdata = Array{Float64}(undef, length(results), 3)
+for i in 1:length(results)
+    plot!(stridespeeds(results[i].steps)..., ylims=(0,Inf))
+    Tspeedup, Tsteady, Tslowdown = splinify(stridespeeds(results[i].steps)...)
+    Tdata[i,:] .= splinify(stridespeeds(results[i].steps)...; thresholds=(0.03,0.98))
+end
+Plots.display(p)
+distances = [sum(result.steps.steplength) for result in results]
+plot(distances, Tdata./[r.totaltime+2*tchange for r in results])
+
+
+
 
 ## Short walks: Peak speed vs. distances
-peakspeeds = [maximum(result.steps.vm) for result in results]
+peakspeeds = [maximum(result.steps.vm) for result in results]     # mid-stance speeds
+peakspeeds = [maximum(stridespeeds(r.steps)[2]) for r in results] # stride speeds
 distances = [sum(result.steps.steplength) for result in results]
 p1 = plot(distances, peakspeeds, xlabel="Distance", ylabel="Peak speed", xlims=(0,Inf), ylims=(0,Inf))
 p2 = plot(walksteps, peakspeeds, xlabel="# of steps", ylabel="Peak speed")
 plot(p1, p2, layout = (1,2), legend=false)
+#savefig("peakshortwalks.svg")
+savefig("peakshortwalks.pdf")
 
 ## Short walks: Time to walk a distance
 # A fairly linear increase in time to walk a distance, but with a slight curved toe-in
-timetowalk = [result.totaltime+2*tchange for result in results]
+timetowalk = [result.totaltime+tchange for result in results]
 plot(distances, timetowalk, xlims=(0,Inf), ylims=(0,Inf),
     xguide="Distance", yguide="Time", title="Time to walk a distance", label=nothing)
+savefig("durationdistance.pdf")
+
+## Short walks: Varying ctimes to demonstrate self-similarity
+wstar4 = findgait(WalkRW2l(α=0.35), target=:speed=>0.3, varying=:P)
+ctimes = range(0.006, 0.06, length=6)
+tchange = 2
+layout = @layout[ a{0.85w} grid(6,1)]
+p = plot(;layout)
+peaks = zeros(length(walksteps),length(ctimes))
+durations = similar(peaks)
+walksteps = [2, 3, 4, 5, 6, 7, 10, 15, 20] # take walks of this # of steps
+results = Array{MultiStepResults,2}(undef,(length(walksteps),length(ctimes))) # store each optimization result here
+for (j,ctime) in enumerate(ctimes)
+    for (i,nsteps) in enumerate(walksteps)
+        result = optwalktime(wstar4, nsteps, ctime=ctime) # optimize with a cost of time
+        #peaks[i,j] = maximum(result.steps.vm)
+        peaks[i,j] = maximum(stridespeeds(result.steps)[2])
+        durations[i,j] = result.totaltime
+        results[i,j] = result
+    end
+end
+# after the fact, let's plot them all on top of each other
+# using the ctime=0.02 result as the basis
+tbase = durations[end,2]
+vbase = peaks[end,2]
+for (j, ctime) in enumerate(ctimes)
+    for (i,nsteps) in enumerate(walksteps)
+        result = results[i,j]
+
+        plotvees!(result, tchange=tchange, color=i, usespline=:false, markersize=2, subplot=j+1,
+            xticks = [20,40], yticks=[0.2,0.4,0.6],xguide="",yguide="",tickfontsize=4,
+            xlims=(0,maximum(durations)+2tchange), ylims=(0,maximum(peaks))) # plot instantaneous speed vs. time
+        plotvees!(result, tchange=tchange, color=i, usespline=:false, markersize=2, tscale = tbase/(durations[end,j]), 
+            vscale = vbase/peaks[end,j],subplot=1)
+    end
+end
+Plots.display(p) 
+println("Durations of a factor of ", (durations[end,1]+2tchange)/(durations[end,end]+2tchange))
+println("Peak speeds over a range of ", peaks[end,end]/peaks[end,1])
+println("  about ", peaks[end,1]*sqrt(9.81)," to ", peaks[end,end]*sqrt(9.81), "m/s")
+savefig("selfsimilarity.pdf")
+savefig("selfsimilarity.svg")
+# GR no fonts, doesn't do eps
+# plotlyJS did export fonts, not necessarily the right one
+# pyplot doesn't preserve fonts, but does export eps
+
+
+
+
 
 ## Short walks: Up and down slopes
 # Compare walking uphill, downhill, and level, for a fixed number of steps, and including
@@ -84,7 +194,7 @@ Plots.display(p)
 # (This optimization allows for faster speeds at short steps, due to a lack of
 # swing leg cost. Humans will probably not walk faster with short steps.)
 stepfreq = onestep(wstar4).stepfrequency
-αs = [0.2, 0.3, 0.4, 0.5]
+αs = [0.2, 0.3, 0.4, 0.5, 0.6]
 nominalsteps = 6
 totaldistance = 6*onestep(wstar4).steplength # walk a similar distance for all
 steplengths = 2*wstar4.L .* sin.(αs)
@@ -98,6 +208,7 @@ for (i,α) in enumerate(αs)
     push!(results, result) # add this optimization to results array
 end
 Plots.display(p) # instantaneous speed vs. distance profiles
+# savefig("steplengthsshortwalks.svg")
 
 
 ## Short walks: Compare trapezoid cruising against short walk
@@ -149,6 +260,7 @@ trapezoidresults=multistep(WalkRW2l(w,vm=vels[1]), Ps=optimal_solution, boundary
 
 # verify with multistep
 multistepplot(trapezoidresults,plotwork=true, label="square")
+savefig("trapezoidshortwalks.svg")
 
 # If you just want to do square wave in speed, it costs a lot of initial push-off
 # so let's compare with walking the same number of steps and same amount of time
@@ -156,6 +268,17 @@ optresults=optwalk(w, Ncruise, boundaryvels=(0,0),totaltime=trapezoidresults.tot
 println("trapezoid cost = ", trapezoidresults.totalcost, "   optimal cost = ", optresults.totalcost)
 # It's definitely more expensive to use the square wave
 multistepplot!(optresults,plotwork=true,label="optimal")
+savefig("trapezoidcomparisonshortwalks.svg")
+
+# nice speed profile comparison
+plotvees(trapezoidresults, tchange=1, rampuporder=1)
+plotvees!(optresults, tchange=1, rampuporder=1)
+
+# nice work comparison
+
+plot([0.5; 1:Nsteps; Nsteps+0.5], [1/2*optresults.vm0^2; optresults.steps.Pwork; NaN],markershape=:circle)
+plot!([0.5; 1:Nsteps; Nsteps+0.5], [1/2*trapezoidresults.vm0^2; trapezoidresults.steps.Pwork; NaN],markershape=:circle)
+
 
 ## Trajectory for short walks
 
@@ -163,7 +286,7 @@ multistepplot!(optresults,plotwork=true,label="optimal")
 ## Brachistokuo Ramp
 # Optimal slope and walk with ramp
 # Compare walking ramp and flat in same amount of time, for three different times
-wstar = findgait(WalkRW2l(α=0.4,safety=true), target=:speed=>0.4, varying=:P)
+wstar = findgait(WalkRW2l(α=0.35,safety=true), target=:speed=>0.4, varying=:P)
 N = 6
 walktime = N * onestep(wstar).tf *0.82 # meant to be a brisk walk
 walkdistance = N * onestep(wstar).steplength
@@ -193,7 +316,47 @@ end
 # plot totalcost vs average speed
 plot(walkdistance ./ walktimes, [getfield.(rampresults, :totalcost), getfield.(flatresults, :totalcost)],
     xlabel="Average speed", ylabel="Total Work", labels=["Ramp" "Flat"])
+# savefig("rampvsflat.pdf")
 
 ## Brachistokuo ramp: Plot the ramp to scale
 plot(onestep(wstar).steplength .* (0:6),cumsum(tan.([0;rampresult.δangles]).*onestep(wstar).steplength),
     aspect_ratio=1)
+sl = onestep(wstar).steplength
+plot(sl .* [0; cumsum(cos.(rampresult.δangles))],[0; cumsum(sin.(rampresult.δangles))].*sl,
+    aspect_ratio=1)
+# savefig("ramptoscale.pdf")
+
+
+includet("drawingtrial.jl")
+using .DynLocoGraphics
+
+
+
+drawmodel(wstar,rampresult.steps[1])
+
+
+p = plot(onestep(wstar).steplength .* (0:6),cumsum(tan.([0;rampresult.δangles]).*onestep(wstar).steplength),
+    aspect_ratio=1)
+
+
+# Use this with our model
+sl = onestep(wstar).steplength
+floorx = sl .* [0; cumsum(cos.(rampresult.δangles))]
+floory = sl .* [0; cumsum(sin.(rampresult.δangles))]
+p = plot(floorx, floory, aspect_ratio=1, showaxis=false, label=false)
+for i = 1:length(rampresult.steps)
+    drawmodel!(p, wstar, rampresult.steps[i],(floorx[i],floory[i]),scalev=0.6)
+end
+display(p)
+
+# actuallly i'm not sure if we get a passive gait going downhill
+findgait(WalkRW2l(wstar4,P=0), target=:speed=>0.3,varying=:γ)
+
+
+## A downhill gait
+wd=WalkRW2l(wstar4,P=0,γ=0.06) # this seems to work
+wdstar = findgait(wd, target=:speed=>0.2, varying=:γ)
+onestep(wd) # γ=0.0538776, vm = 0.14129694390484976
+msr=multistep(WalkRW2l(wdstar,P=0,γ=0), P=zeros(14),δangles=-0.0538776800329528*ones(14))
+# yeah, something is wrong with going downhill, this doesn't match with
+# the wdstar gait, although it may have to do with how mid-stance is defined

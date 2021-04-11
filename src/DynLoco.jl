@@ -36,7 +36,7 @@ albeit very slowly if given insufficient forward speed.
     g = 1.  # gravitational acceleration
     parms = (:α, :γ, :L, :M, :g) # a list of the model parameters
     limitcycle = (parms = (:vm,), f = w -> onestep(w).vm - w.vm)
-    safety = false # model falls backward if not enough momentum
+    safety = false # safety keeps model from falling backward if not enough momentum
 end
 
 export StepResults, MultiStepResults
@@ -70,7 +70,7 @@ struct StepResults
     Ωminus
     Ωplus
     vm0    # middle-stance velocity at start of step
-    δ      # slope wrt horizontal
+    δ      # slope of landing step + wrt level 
 end
 
 function Base.show(io::IO, w::W) where W <: Walk
@@ -111,7 +111,7 @@ struct MultiStepResults
     totalcost
     totaltime
     vm0             # initial speed
-    δangles         # angles
+    δangles         # angles, defined positive wrt nominal γ from preceding step
     boundaryvels::Tuple
 end
 
@@ -269,8 +269,8 @@ function findgait(w::W, target::Tuple{Vararg{Pair}}, varying::Tuple) where W <: 
     if termination_status(model) == MOI.LOCALLY_SOLVED || termination_status(model) == MOI.OPTIMAL
         optimal_solution = value.(var[i] for i in 1:nvars) # e.g. P, vm, etc. (JuMP.value returns optima)
     else
+        println("termination: ", termination_status(model))
         error("The model was not solved correctly.")
-        println(termination_status(model))
     end
     # produce a new Walk struct
     assignedoptimalparms = (; zip(varying, optimal_solution)...) # P = 0.17, etc.
@@ -379,7 +379,7 @@ multistepplot
                    ([0.5;1:n;n+0.5], [v[1]-boundaryvels[1]; P; NaN]) # just plot the push-offs
     end
 
-    if doslope
+    if doslope # draw the terrain heights (cumulative sum of angles)
         @series begin
             subplot := 3
             yguide := "Terrain height"
@@ -451,7 +451,7 @@ function optwalk(w::W, numsteps=5; boundaryvels::Union{Tuple,Nothing} = nothing,
     end
 
     return multistep(W(w,vm=value(v[1])), value.(P), δ, vm0=value(v[1]), boundaryvels=boundaryvels,
-        extracost = boundarywork ? 1/2*(value(v[1])^2 - boundaryvels[1]^2)+0/2*(value(v[end])^2-boundaryvels[2]^2) : 0) #, optimal_solution
+        extracost = boundarywork ? 1/2*(value(v[1])^2 - boundaryvels[1]^2) : 0) #, optimal_solution
 end
 
 """
@@ -537,6 +537,9 @@ export plotvees, plotvees!
 
 Plots a series of discrete speeds for multiple steps, along with a spline
 to connect the discrete points. Returns a `Plot` struct. See also plotvees!(p, ...).
+Other options: usespline = true, color = :auto, rampuporder = 2, tscale = 1, vscale = 1,
+speedtype = :stride vs :midstance (default stride speed is stride length divided by stride 
+time between footfalls; midstance explicitly includes ramp-up and -down profiles)
 """
 plotvees(results::MultiStepResults; veeparms...) = plotvees!(plot(), results; veeparms...)
 
@@ -544,16 +547,32 @@ plotvees(results::MultiStepResults; veeparms...) = plotvees!(plot(), results; ve
 plotvees!(results::MultiStepResults; veeparms...) = plotvees!(Plots.CURRENT_PLOT.nullableplot, results; veeparms...)
 
 function plotvees!(p::Union{Plots.Plot,Plots.Subplot}, msr::MultiStepResults; tchange = 3, boundaryvels = (0.,0.),
-    color = :auto, usespline=true, rampuporder = 2, plotoptions...)
-    v = [msr.vm0; msr.steps.vm] # vm0 is the speed at beginning of first step, vm is the mid-stance speed of first step
+    color = :auto, usespline=true, rampuporder = 2, tscale = 1, vscale = 1, speedtype = :step, plotoptions...)
+    if speedtype == :stride
+        v = [0; msr.vm0; msr.steps.steplength ./ msr.steps.tf; msr.vm0]*vscale
+        times = cumsum([0; tchange; msr.steps.tf*tscale; tchange])
+        #stepdistances = [0; steps.steplength; 0]
+        #return cumsum(steptimes,dims=1), stepdistances./steptimes
+    elseif speedtype == :step # step speeds
+        steptimes = [msr.steps.tf; tchange]
+        stepdistances = [msr.steps.steplength; 0]
+        times = cumsum([0; msr.steps.tf*tscale; tchange], dims=1)
+        v = [0; stepdistances./steptimes]*vscale
+    elseif speedtype == :midstance
+        v = [0; msr.vm0; msr.steps.vm; 0]*vscale # vm0 is the speed at beginning of first step, vm is the mid-stance speed of first step
+        times = cumsum([0; tchange; msr.steps.tf*tscale; tchange]) # add up step times, starting from ramp-up
+    else 
+        error("Option speedtype unrecognized: ", 2)
+    end
     n = length(msr.steps)
-    times = cumsum([tchange; msr.steps.tf]) # add up step times, starting from ramp-up
     # make smooth ramp-up in speed
     t0 = range(0, tchange, length=10)
-    vstart = v[1]*(t0/tchange).^rampuporder      # ramp-up in speed, monomial degree ramporder
-    vend = v[n+1]*(1 .- t0/tchange).^rampuporder # ramp-down in speed
+    vstart = msr.vm0*(t0/tchange).^rampuporder      # ramp-up in speed, monomial degree ramporder
+    vend = msr.vm0*(1 .- t0/tchange).^rampuporder # ramp-down in speed
     if usespline     # make a smooth spline from discrete velocities
-        k = 2 # spline order
+        k = rampuporder # spline order
+        println("times " ,times)
+        println("v = ", v)
         if length(v) > 2 # enough points to make splines from v alone
             spline = Spline1D(times, v; k=k)
         else # only say 1 point, so let's pad v with the ramp-up ramp-down
@@ -561,12 +580,23 @@ function plotvees!(p::Union{Plots.Plot,Plots.Subplot}, msr::MultiStepResults; tc
                 [vstart[1]; v; vend[end]], k=k)
         end
         tspline = range(times[1], times[end], length=20)
-        plot!(p,[t0; tspline; t0 .+ times[end]], [vstart; spline.(tspline); vend], color=color;
+        plot!(p,tspline, spline.(tspline), color=color;
             plotoptions...)
+        #plot!(p,[t0; tspline; t0 .+ times[end]], [vstart; spline.(tspline); vend], color=color;
+        #    plotoptions...)
+        twhole = [t0; tspline; t0 .+ times[end]]
+        vwhole = [vstart; spline.(tspline); vend]
+        tsteady = twhole[vwhole .>= 0.9*maximum(vwhole)]
+        taccel = twhole[0.1*maximum(vwhole) .<= vwhole .< 0.9*maximum(vwhole)]
+        tspeedup = taccel[taccel .< 0.5*twhole[end]]
+        tslowdown = taccel[taccel .>= 0.5*twhole[end]]
+        #println(tspeedup[end]-tspeedup[1], " ", taccel[end]-taccel[1], " ", tslowdown[end]-tslowdown[1])
     end
-    plot!(p, times, v, seriestype=:scatter, legend=:none, color=color, # dots for discrete velocities
+    plot!(p, times, v, legend=:none, color=color; plotoptions...)
+    plot!(p, times, v, seriestype=:scatter, markeralpha=0.1, legend=:none, color=color, # dots for discrete velocities
         xguide="time", yguide="speed"; plotoptions...)
 end
+
 
 
 using JuMP, Ipopt
@@ -637,6 +667,12 @@ returns nearly the same gait conditions for the next step.
 """
 islimitcycle(w::Walk) = onestep(w).vm ≈ w.vm
 
+export stepspeeds
+function stridespeeds(steps; tchange = 1)
+    steptimes = [steps.tf; tchange]
+    stepdistances = [steps.steplength; 0]
+    return cumsum([0;steptimes],dims=1), [0; stepdistances./steptimes]
+end
 
 # Optimize walking to match a velocity profile
 # function optwalkvel(w::Walk, vels; boundaryvels::Union{Tuple,Nothing} = nothing,
@@ -686,4 +722,5 @@ islimitcycle(w::Walk) = onestep(w).vm ≈ w.vm
 
 
 
+export multistep
 end # Module
