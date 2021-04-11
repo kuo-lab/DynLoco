@@ -438,7 +438,7 @@ function optwalk(w::W, numsteps=5; boundaryvels::Union{Tuple,Nothing} = nothing,
     @NLconstraint(optsteps, summedtime == totaltime) # total time
 
     if boundarywork
-        @objective(optsteps, Min, 1/2*(sum((P[i]^2 for i=1:numsteps))+v[1]^2-boundaryvels[1]^2)) # minimum pos work
+        @objective(optsteps, Min, 1/2*(sum((P[i]^2 for i=1:numsteps))+v[1]^2-boundaryvels[1]^2)+0*(v[end]^2-boundaryvels[2]^2)) # minimum pos work
     else
         @objective(optsteps, Min, 1/2*sum((P[i]^2 for i=1:numsteps))) # minimum pos work
     end
@@ -449,8 +449,9 @@ function optwalk(w::W, numsteps=5; boundaryvels::Union{Tuple,Nothing} = nothing,
         error("The model was not solved correctly.")
         println(termination_status(optsteps))
     end
+
     return multistep(W(w,vm=value(v[1])), value.(P), δ, vm0=value(v[1]), boundaryvels=boundaryvels,
-        extracost = boundarywork ? 1/2*(value(v[1])^2 - boundaryvels[1]^2) : 0) #, optimal_solution
+        extracost = boundarywork ? 1/2*(value(v[1])^2 - boundaryvels[1]^2)+0/2*(value(v[end])^2-boundaryvels[2]^2) : 0) #, optimal_solution
 end
 
 """
@@ -593,8 +594,8 @@ function optwalktime(w::W, nsteps=5; boundaryvels::Union{Tuple,Nothing} = (0.,0.
     w = W(w; walkparms...)
     optsteps = Model(optimizer_with_attributes(Ipopt.Optimizer, "print_level"=>1))
     @variable(optsteps, P[1:nsteps]>=0, start=w.P) # JuMP variables P
-    # constraints: start
-    if length(startv) == 1
+    # constraints: starting guess for velocities
+    if length(startv) == 1 # startv can be just a scalar, a 1-element vector, or n elements
         @variable(optsteps, v[1:nsteps+1]>=0, start=startv)
     else # starting guess for v is an array
         @variable(optsteps, v[i=1:nsteps+1]>=0, start=startv[i])
@@ -614,6 +615,13 @@ function optwalktime(w::W, nsteps=5; boundaryvels::Union{Tuple,Nothing} = (0.,0.
             ctime*totaltime)
     end
     optimize!(optsteps)
+    if termination_status(optsteps) == MOI.LOCALLY_SOLVED || termination_status(optsteps) == MOI.OPTIMAL
+        optimal_solution = (vms=value.(v), Ps=value.(P))
+    else
+        error("The model was not solved correctly.")
+        println(termination_status(optsteps))
+    end
+
     result = multistep(W(w,vm=value(v[1]),safety=safety), value.(P), δs, vm0=value(v[1]),
         boundaryvels=boundaryvels, extracost = ctime*value(totaltime) +
         (boundarywork ? 1/2*(value(v[1])^2-boundaryvels[1]^2) : 0))
