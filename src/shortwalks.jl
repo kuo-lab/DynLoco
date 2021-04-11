@@ -360,3 +360,20 @@ onestep(wd) # γ=0.0538776, vm = 0.14129694390484976
 msr=multistep(WalkRW2l(wdstar,P=0,γ=0), P=zeros(14),δangles=-0.0538776800329528*ones(14))
 # yeah, something is wrong with going downhill, this doesn't match with
 # the wdstar gait, although it may have to do with how mid-stance is defined
+
+
+## Some mpc attempts scratch
+wstar4s = findgait(WalkRW2l(α=0.4,safety=true), target=:speed=>0.45, varying=:P)
+tchange = 2
+myslope = 0.08
+ctime = 0.02
+nsteps = 10
+resultlevel = optwalktime(wstar4s, nsteps, boundarywork = true, boundaryvels=(0,0), ctime = ctime,safety=false)
+plotvees(resultlevel, tchange=tchange, title="Level", usespline=false,rampuporder=1) # special function to include ramp-up in speed
+
+# check whether you can optimize for same steps but with time constrained
+resultsettime=optwalk(wstar4s, nsteps, boundarywork=true, boundaryvels=(0,0),totaltime=resultlevel.totaltime  )
+plotvees!(resultsettime, tchange=tchange, usespline=false)
+println("trapezoid cost = ", trapezoidresults.totalcost, "   optimal cost = ", optresults.totalcost)
+# It's definitely more expensive to use the square wave
+multistepplot!(optresults,plotwork=true,label="optimal")
