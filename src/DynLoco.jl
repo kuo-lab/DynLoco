@@ -407,8 +407,15 @@ the same time expected of the nominal `w` on level ground.
 
 See also `optwalkslope`
 """
+#function optwalk(w::W, numsteps=5; boundarywork::Bool=true, args...) where W <: Walk 
+#    println("boundarywork = ", boundarywork)
+#    mytuple = (boundarywork, boundarywork)
+#    println("mytuple = ", mytuple)
+#    optwalk(w, numsteps; boundarywork=mytuple,args...)
+#end
+
 function optwalk(w::W, numsteps=5; boundaryvels::Union{Tuple,Nothing} = nothing,
-    boundarywork = true, totaltime=numsteps*onestep(w).tf,
+    boundarywork::Union{Tuple{Bool,Bool},Bool} = (true,true), totaltime=numsteps*onestep(w).tf,
     δ = zeros(numsteps)) where W <: Walk # default to taking the time of regular steady walking
 
     optsteps = Model(optimizer_with_attributes(Ipopt.Optimizer, "print_level"=>0))
@@ -419,8 +426,14 @@ function optwalk(w::W, numsteps=5; boundaryvels::Union{Tuple,Nothing} = nothing,
         boundaryvels = (w.vm, w.vm) # default to given gait if nothing specified
     end
 
-    if !boundarywork # no hip work at beginning or end; apply boundary velocity constraints
+    if typeof(boundarywork) <: Bool
+        boundarywork = (boundarywork, boundarywork)
+    end
+
+    if !boundarywork[1] # no hip work at beginning or end; apply boundary velocity constraints
         @constraint(optsteps, v[1] == boundaryvels[1])
+    end
+    if !boundarywork[2]
         @constraint(optsteps, v[numsteps+1] == boundaryvels[2])
     end
 
@@ -437,7 +450,7 @@ function optwalk(w::W, numsteps=5; boundaryvels::Union{Tuple,Nothing} = nothing,
     end
     @NLconstraint(optsteps, summedtime == totaltime) # total time
 
-    if boundarywork
+    if boundarywork[1]
         @objective(optsteps, Min, 1/2*(sum((P[i]^2 for i=1:numsteps))+v[1]^2-boundaryvels[1]^2)+0*(v[end]^2-boundaryvels[2]^2)) # minimum pos work
     else
         @objective(optsteps, Min, 1/2*sum((P[i]^2 for i=1:numsteps))) # minimum pos work
@@ -451,7 +464,7 @@ function optwalk(w::W, numsteps=5; boundaryvels::Union{Tuple,Nothing} = nothing,
     end
 
     return multistep(W(w,vm=value(v[1])), value.(P), δ, vm0=value(v[1]), boundaryvels=boundaryvels,
-        extracost = boundarywork ? 1/2*(value(v[1])^2 - boundaryvels[1]^2)+0/2*(value(v[end])^2-boundaryvels[2]^2) : 0) #, optimal_solution
+        extracost = boundarywork[1] ? 1/2*(value(v[1])^2 - boundaryvels[1]^2)+0/2*(value(v[end])^2-boundaryvels[2]^2) : 0) #, optimal_solution
 end
 
 """

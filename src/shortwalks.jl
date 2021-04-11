@@ -374,6 +374,32 @@ plotvees(resultlevel, tchange=tchange, title="Level", usespline=false,rampuporde
 # check whether you can optimize for same steps but with time constrained
 resultsettime=optwalk(wstar4s, nsteps, boundarywork=true, boundaryvels=(0,0),totaltime=resultlevel.totaltime  )
 plotvees!(resultsettime, tchange=tchange, usespline=false)
+
+# now let's step through it slowly
+# first, we do a bit of work to get to the vm:
+remainingtime = resultsettime.totaltime
+remainingsteps = nsteps
+step = resultsettime.steps[1]
+bcwork = 1/2*(step.vm0^2 - 0^2) # applied boundary impulse, now ready to step
+mysteps = Vector{StepResults}(undef,nsteps)
+for i in 1:nsteps
+    println("i = $i")
+    # take a step
+nextstep = onestep(wstar4s, vm=step.vm0, P=step.P, δangle=step.δ)
+mysteps[i] = StepResults(nextstep...)
+@assert isapprox(nextstep.vm, resultsettime.steps[i].vm, atol=1e-4) # check whether the steps agree
+remainingsteps = remainingsteps - 1
+remainingtime = remainingtime - nextstep.tf
+# we've taken one step, so optimize again
+nextmsr = optwalk(wstar4s, remainingsteps, boundarywork=(false,true), boundaryvels=(nextstep.vm,0), totaltime=remainingtime)
+plotvees!(nextmsr, tchange=tchange, usespline=false, show=true)
+@assert isapprox(nextmsr.steps[1].vm, resultsettime.steps[i+1].vm, atol=1e-4)
+# set up for the next one
+step = nextmsr.steps[1]
+end
+
+
+
 println("trapezoid cost = ", trapezoidresults.totalcost, "   optimal cost = ", optresults.totalcost)
 # It's definitely more expensive to use the square wave
 multistepplot!(optresults,plotwork=true,label="optimal")
