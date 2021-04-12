@@ -362,44 +362,42 @@ msr=multistep(WalkRW2l(wdstar,P=0,γ=0), P=zeros(14),δangles=-0.053877680032952
 # the wdstar gait, although it may have to do with how mid-stance is defined
 
 
-## Some mpc attempts scratch
+## MPC attempt. Do a short walk, and do a finite-horizon MPC after each step
 wstar4s = findgait(WalkRW2l(α=0.4,safety=true), target=:speed=>0.45, varying=:P)
 tchange = 2
 myslope = 0.08
 ctime = 0.02
 nsteps = 10
 resultlevel = optwalktime(wstar4s, nsteps, boundarywork = true, boundaryvels=(0,0), ctime = ctime,safety=false)
-plotvees(resultlevel, tchange=tchange, title="Level", usespline=false,rampuporder=1) # special function to include ramp-up in speed
+plotvees(resultlevel, tchange=tchange, title="Level", usespline=false,rampuporder=1, speedtype=:midstance) # special function to include ramp-up in speed
 
 # check whether you can optimize for same steps but with time constrained
 resultsettime=optwalk(wstar4s, nsteps, boundarywork=true, boundaryvels=(0,0),totaltime=resultlevel.totaltime  )
-plotvees!(resultsettime, tchange=tchange, usespline=false)
+plotvees!(resultsettime, tchange=tchange, usespline=false, speedtype=:midstance)
 
 # now let's step through it slowly
 # first, we do a bit of work to get to the vm:
 remainingtime = resultsettime.totaltime
 remainingsteps = nsteps
-step = resultsettime.steps[1]
-bcwork = 1/2*(step.vm0^2 - 0^2) # applied boundary impulse, now ready to step
+currentstep = resultsettime.steps[1]
+bcwork = 1/2*(currentstep.vm0^2 - 0^2) # applied boundary impulse, now ready to step
 mysteps = Vector{StepResults}(undef,nsteps)
-for i in 1:nsteps
+for i in 1:nsteps-1 # finite horizon after each i'th step
+    #i=1
     println("i = $i")
     # take a step
-nextstep = onestep(wstar4s, vm=step.vm0, P=step.P, δangle=step.δ)
-mysteps[i] = StepResults(nextstep...)
-@assert isapprox(nextstep.vm, resultsettime.steps[i].vm, atol=1e-4) # check whether the steps agree
-remainingsteps = remainingsteps - 1
-remainingtime = remainingtime - nextstep.tf
-# we've taken one step, so optimize again
-nextmsr = optwalk(wstar4s, remainingsteps, boundarywork=(false,true), boundaryvels=(nextstep.vm,0), totaltime=remainingtime)
-plotvees!(nextmsr, tchange=tchange, usespline=false, show=true)
-@assert isapprox(nextmsr.steps[1].vm, resultsettime.steps[i+1].vm, atol=1e-4)
-# set up for the next one
-step = nextmsr.steps[1]
+    nextstep = onestep(wstar4s, vm=currentstep.vm0, P=currentstep.P, δangle=currentstep.δ)
+    mysteps[i] = StepResults(nextstep...)
+    @assert isapprox(nextstep.vm, resultsettime.steps[i].vm, atol=1e-4) # check whether the steps agree
+    remainingsteps = remainingsteps - 1
+    remainingtime = remainingtime - nextstep.tf
+    # we've taken one step, so optimize again
+    nextmsr = optwalk(wstar4s, remainingsteps, boundarywork=(false,true), boundaryvels=(nextstep.vm,0), totaltime=remainingtime)
+    #plotvees!(nextmsr, tchange=tchange, usespline=false, show=true)
+    plot!(cumsum([tchange+resultsettime.totaltime-remainingtime;nextmsr.steps.tf]),
+        [nextstep.vm;nextmsr.steps.vm],show=true)
+    @assert isapprox(nextmsr.steps[1].vm, resultsettime.steps[i+1].vm, atol=1e-4)
+    # set up for the next one
+    currentstep = nextmsr.steps[1]
 end
 
-
-
-println("trapezoid cost = ", trapezoidresults.totalcost, "   optimal cost = ", optresults.totalcost)
-# It's definitely more expensive to use the square wave
-multistepplot!(optresults,plotwork=true,label="optimal")
