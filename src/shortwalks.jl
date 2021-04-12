@@ -441,16 +441,16 @@ nsteps = 15
 δs = zeros(nsteps); δs[Int((nsteps+1)/2)] = 0.05
 nominalmsr=optwalk(wstar4s, nsteps, boundarywork=false, δs=δs)
 plotvees(nominalmsr,speedtype=:midstance,usespline=false,boundaryvels=(wstar4s.vm,wstar4s.vm),tchange=0)
-nhorizon = 12
+nhorizon = 12 # so far we shouldn't reduce the horizon much
+# because we're assuming you want to match a twin brother at horizon
+# but we could also try to match our original plan
 
 elapsedtime = 0
 modeltime = 0
-currentstep = nominalmsr.steps[1]
 currentvm0 = nominalmsr.steps[1].vm0
 mpcsteps = Vector{StepResults}(undef,nsteps)
 upcomingδs = zeros(nhorizon)
 for i in 1:nsteps-1 # receding horzion; don't optimize the last step
-#i=1
     println("i = $i")
     # optimize starting from the most recent vm0
     errortime = elapsedtime - modeltime # how far you're ahead of nominal model
