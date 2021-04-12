@@ -407,16 +407,9 @@ the same time expected of the nominal `w` on level ground.
 
 See also `optwalkslope`
 """
-#function optwalk(w::W, numsteps=5; boundarywork::Bool=true, args...) where W <: Walk 
-#    println("boundarywork = ", boundarywork)
-#    mytuple = (boundarywork, boundarywork)
-#    println("mytuple = ", mytuple)
-#    optwalk(w, numsteps; boundarywork=mytuple,args...)
-#end
-
 function optwalk(w::W, numsteps=5; boundaryvels::Union{Tuple,Nothing} = nothing,
     boundarywork::Union{Tuple{Bool,Bool},Bool} = (true,true), totaltime=numsteps*onestep(w).tf,
-    δ = zeros(numsteps)) where W <: Walk # default to taking the time of regular steady walking
+    δs = zeros(numsteps)) where W <: Walk # default to taking the time of regular steady walking
 
     optsteps = Model(optimizer_with_attributes(Ipopt.Optimizer, "print_level"=>0))
     @variable(optsteps, P[1:numsteps]>=0, start=w.P) # JuMP variables P
@@ -444,9 +437,9 @@ function optwalk(w::W, numsteps=5; boundaryvels::Union{Tuple,Nothing} = nothing,
     register(optsteps, :onestept, 3, # time after a step
         (v,P,δ)->onestep(w,P=P,vm=v, δangle=δ).tf, autodiff=true)
     @NLexpression(optsteps, summedtime, # add up time of all steps
-        sum(onestept(v[i],P[i],δ[i]) for i = 1:numsteps))
+        sum(onestept(v[i],P[i],δs[i]) for i = 1:numsteps))
     for i = 1:numsteps  # step dynamics
-        @NLconstraint(optsteps, v[i+1]==onestepv(v[i],P[i],δ[i]))
+        @NLconstraint(optsteps, v[i+1]==onestepv(v[i],P[i],δs[i]))
     end
     @NLconstraint(optsteps, summedtime == totaltime) # total time
 
@@ -463,7 +456,7 @@ function optwalk(w::W, numsteps=5; boundaryvels::Union{Tuple,Nothing} = nothing,
         println(termination_status(optsteps))
     end
 
-    return multistep(W(w,vm=value(v[1])), value.(P), δ, vm0=value(v[1]), boundaryvels=boundaryvels,
+    return multistep(W(w,vm=value(v[1])), value.(P), δs, vm0=value(v[1]), boundaryvels=boundaryvels,
         extracost = boundarywork[1] ? 1/2*(value(v[1])^2 - boundaryvels[1]^2)+0/2*(value(v[end])^2-boundaryvels[2]^2) : 0) #, optimal_solution
 end
 
@@ -572,7 +565,7 @@ function plotvees!(p::Union{Plots.Plot,Plots.Subplot}, msr::MultiStepResults; tc
         times = cumsum([0; msr.steps.tf*tscale; tchange], dims=1)
         v = [0; stepdistances./steptimes]*vscale
     elseif speedtype == :midstance
-        v = [0; msr.vm0; msr.steps.vm; 0]*vscale # vm0 is the speed at beginning of first step, vm is the mid-stance speed of first step
+        v = [boundaryvels[1]; msr.vm0; msr.steps.vm; boundaryvels[2]]*vscale # vm0 is the speed at beginning of first step, vm is the mid-stance speed of first step
         times = cumsum([0; tchange; msr.steps.tf*tscale; tchange]) # add up step times, starting from ramp-up
     else 
         error("Option speedtype unrecognized: ", 2)

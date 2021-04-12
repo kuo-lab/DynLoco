@@ -363,6 +363,9 @@ msr=multistep(WalkRW2l(wdstar,P=0,γ=0), P=zeros(14),δangles=-0.053877680032952
 
 
 ## MPC attempt. Do a short walk, and do a finite-horizon MPC after each step
+# Optimize a short walk on level ground in resultlevel, with a time objective
+# and then do another optimization for a fixed (but same) amount of time (resultsettime)
+# and then do a finite (fixed) horizon MPC to re-do that optimization
 wstar4s = findgait(WalkRW2l(α=0.4,safety=true), target=:speed=>0.45, varying=:P)
 tchange = 2
 myslope = 0.08
@@ -375,8 +378,8 @@ plotvees(resultlevel, tchange=tchange, title="Level", usespline=false,rampuporde
 resultsettime=optwalk(wstar4s, nsteps, boundarywork=true, boundaryvels=(0,0),totaltime=resultlevel.totaltime  )
 plotvees!(resultsettime, tchange=tchange, usespline=false, speedtype=:midstance)
 
-# now let's step through it slowly
-# first, we do a bit of work to get to the vm:
+
+# Start MPC
 remainingtime = resultsettime.totaltime
 remainingsteps = nsteps
 currentstep = resultsettime.steps[1]
@@ -384,12 +387,11 @@ currentvm0 = resultsettime.steps[1].vm0
 bcwork = 1/2*(currentstep.vm0^2 - 0^2) # applied boundary impulse, now ready to step
 mysteps = Vector{StepResults}(undef,nsteps)
 for i in 1:nsteps # finite horizon after each i'th step
- #   i=1
     println("i = $i")
     # optimize starting from the most recent vm0
     nextmsr = optwalk(wstar4s, remainingsteps, boundarywork=(false,true), boundaryvels=(currentvm0,0), totaltime=remainingtime)
     # take a step (optional, should match what was optimized)
-    nextstep = onestep(wstar4s, vm=currentstep.vm0, P=currentstep.P, δangle=currentstep.δ)
+    nextstep = onestep(wstar4s, vm=currentvm0, P=currentstep.P, δangle=currentstep.δ)
     nextstep = nextmsr.steps[1] # or use next step: StepResults(nextstep...)
     mysteps[i] = nextstep 
     println("nextstepvm = ", nextstep.vm, "  result.vm = ", resultsettime.steps[i].vm)
@@ -402,3 +404,34 @@ for i in 1:nsteps # finite horizon after each i'th step
     currentvm0 = nextstep.vm
 end
 # okay, this works; each step is a finite horizon MPC with a shortening horizon
+
+## Let's try walking over a bumps
+wstar4s = findgait(WalkRW2l(α=0.4,safety=true), target=:speed=>0.45, varying=:P)
+nsteps = 15
+δs = zeros(nsteps); δs[Int((nsteps+1)/2)] = 0.05
+nominalmsr=optwalk(wstar4s, nsteps, boundarywork=false, δs=δs)
+plotvees(nominalmsr,speedtype=:midstance,usespline=false,boundaryvels=(wstar4s.vm,wstar4s.vm),tchange=0)
+# now do a finite horizon MPC
+
+remainingtime = nominalmsr.totaltime
+remainingsteps = nsteps
+currentstep = nominalmsr.steps[1]
+currentvm0 = nominalmsr.steps[1].vm0
+mpcsteps = Vector{StepResults}(undef,nsteps)
+for i in 1:nsteps-1 # finite horizon after each i'th step; don't optimize the last step
+    println("i = $i")
+    # optimize starting from the most recent vm0
+    nextmsr = optwalk(wstar4s, remainingsteps, boundarywork=(false,false), boundaryvels=(currentvm0,wstar4s.vm), totaltime=remainingtime, δs=δs[i:nsteps])
+    nextstep = nextmsr.steps[1] 
+    mpcsteps[i] = nextstep 
+    println("nextstepvm = ", nextstep.vm, "  result.vm = ", nominalmsr.steps[i].vm)
+    @assert isapprox(nextstep.vm, nominalmsr.steps[i].vm, atol=1e-4) # check whether the steps agree
+    plot!(cumsum([nominalmsr.totaltime-remainingtime;nextmsr.steps.tf]),
+        [nextstep.vm0;nextmsr.steps.vm],show=true)
+    remainingsteps = remainingsteps - 1
+    remainingtime = remainingtime - nextstep.tf
+    # set up for the next one
+    currentvm0 = nextstep.vm
+end
+# last step can't be solved easily, because we have one push-off to satisfy both
+# the last time and the last vm; so we don't bother with it
