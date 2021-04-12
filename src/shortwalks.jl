@@ -380,24 +380,25 @@ plotvees!(resultsettime, tchange=tchange, usespline=false, speedtype=:midstance)
 remainingtime = resultsettime.totaltime
 remainingsteps = nsteps
 currentstep = resultsettime.steps[1]
+currentvm0 = resultsettime.steps[1].vm0
 bcwork = 1/2*(currentstep.vm0^2 - 0^2) # applied boundary impulse, now ready to step
 mysteps = Vector{StepResults}(undef,nsteps)
-for i in 1:nsteps-1 # finite horizon after each i'th step
-    #i=1
+for i in 1:nsteps # finite horizon after each i'th step
+ #   i=1
     println("i = $i")
-    # take a step
+    # optimize starting from the most recent vm0
+    nextmsr = optwalk(wstar4s, remainingsteps, boundarywork=(false,true), boundaryvels=(currentvm0,0), totaltime=remainingtime)
+    # take a step (optional, should match what was optimized)
     nextstep = onestep(wstar4s, vm=currentstep.vm0, P=currentstep.P, δangle=currentstep.δ)
-    mysteps[i] = StepResults(nextstep...)
+    nextstep = nextmsr.steps[1] # or use next step: StepResults(nextstep...)
+    mysteps[i] = nextstep 
+    println("nextstepvm = ", nextstep.vm, "  result.vm = ", resultsettime.steps[i].vm)
     @assert isapprox(nextstep.vm, resultsettime.steps[i].vm, atol=1e-4) # check whether the steps agree
+    plot!(cumsum([tchange+resultsettime.totaltime-remainingtime;nextmsr.steps.tf]),
+        [nextstep.vm0;nextmsr.steps.vm],show=true)
     remainingsteps = remainingsteps - 1
     remainingtime = remainingtime - nextstep.tf
-    # we've taken one step, so optimize again
-    nextmsr = optwalk(wstar4s, remainingsteps, boundarywork=(false,true), boundaryvels=(nextstep.vm,0), totaltime=remainingtime)
-    #plotvees!(nextmsr, tchange=tchange, usespline=false, show=true)
-    plot!(cumsum([tchange+resultsettime.totaltime-remainingtime;nextmsr.steps.tf]),
-        [nextstep.vm;nextmsr.steps.vm],show=true)
-    @assert isapprox(nextmsr.steps[1].vm, resultsettime.steps[i+1].vm, atol=1e-4)
     # set up for the next one
-    currentstep = nextmsr.steps[1]
+    currentvm0 = nextstep.vm
 end
-
+# okay, this works; each step is a finite horizon MPC with a shortening horizon
