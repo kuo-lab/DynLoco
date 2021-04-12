@@ -405,13 +405,12 @@ for i in 1:nsteps # finite horizon after each i'th step
 end
 # okay, this works; each step is a finite horizon MPC with a shortening horizon
 
-## Let's try walking over a bumps
+## Finite horizon MPC walking over a bump
 wstar4s = findgait(WalkRW2l(α=0.4,safety=true), target=:speed=>0.45, varying=:P)
 nsteps = 15
 δs = zeros(nsteps); δs[Int((nsteps+1)/2)] = 0.05
 nominalmsr=optwalk(wstar4s, nsteps, boundarywork=false, δs=δs)
 plotvees(nominalmsr,speedtype=:midstance,usespline=false,boundaryvels=(wstar4s.vm,wstar4s.vm),tchange=0)
-# now do a finite horizon MPC
 
 remainingtime = nominalmsr.totaltime
 remainingsteps = nsteps
@@ -435,3 +434,46 @@ for i in 1:nsteps-1 # finite horizon after each i'th step; don't optimize the la
 end
 # last step can't be solved easily, because we have one push-off to satisfy both
 # the last time and the last vm; so we don't bother with it
+
+## Receding horizon MPC walking over a bump
+wstar4s = findgait(WalkRW2l(α=0.4,safety=true), target=:speed=>0.45, varying=:P)
+nsteps = 15
+δs = zeros(nsteps); δs[Int((nsteps+1)/2)] = 0.05
+nominalmsr=optwalk(wstar4s, nsteps, boundarywork=false, δs=δs)
+plotvees(nominalmsr,speedtype=:midstance,usespline=false,boundaryvels=(wstar4s.vm,wstar4s.vm),tchange=0)
+nhorizon = 12
+
+elapsedtime = 0
+modeltime = 0
+currentstep = nominalmsr.steps[1]
+currentvm0 = nominalmsr.steps[1].vm0
+mpcsteps = Vector{StepResults}(undef,nsteps)
+upcomingδs = zeros(nhorizon)
+for i in 1:nsteps-1 # receding horzion; don't optimize the last step
+#i=1
+    println("i = $i")
+    # optimize starting from the most recent vm0
+    errortime = elapsedtime - modeltime # how far you're ahead of nominal model
+    remainingtime = tfstar * nhorizon - errortime # make up for lost time
+    if i+nhorizon-1 > nsteps # need to pad zeros
+        # let's say your horizon is 6, and nsteps = 10, but
+        # but we are on step i = 6, so we have to pad with zeros
+        extrazerosteps = i+nhorizon-1-nsteps
+        upcomingδs[1:nhorizon-extrazerosteps] = δs[i:nsteps]
+        upcomingδs[nhorizon-extrazerosteps+1:nhorizon] .= 0
+    else # plenty of steps left
+        upcomingδs[1:nhorizon] .= δs[i:i+nhorizon-1] # unless i+nhorizon-1 exceeds nsteps, then we need to shrink horizon
+    end # setting upcomingδs
+    nextmsr = optwalk(wstar4s, nhorizon, boundarywork=(false,false), boundaryvels=(currentvm0,wstar4s.vm), totaltime=remainingtime, δs=upcomingδs)
+    nextstep = nextmsr.steps[1] 
+    mpcsteps[i] = nextstep 
+    println("nextstepvm = ", nextstep.vm, "  result.vm = ", nominalmsr.steps[i].vm)
+    #@assert isapprox(nextstep.vm, nominalmsr.steps[i].vm, atol=1e-4) # check whether the steps agree
+    plot!(cumsum([elapsedtime;nextmsr.steps[1:end-1].tf]),
+        [nextstep.vm0;nextmsr.steps.vm[1:end-1]],show=true)
+    remainingtime = remainingtime - nextstep.tf
+    # set up for the next one
+    currentvm0 = nextstep.vm
+    elapsedtime = elapsedtime + nextstep.tf
+    modeltime = modeltime + tfstar
+end
