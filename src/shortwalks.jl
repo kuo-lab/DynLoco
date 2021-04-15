@@ -477,3 +477,21 @@ for i in 1:nsteps-1 # receding horzion; don't optimize the last step
     elapsedtime = elapsedtime + nextstep.tf
     modeltime = modeltime + tfstar
 end
+
+
+
+## Walk over a single bump with fixed and with varying step lengths
+wstar4s = findgait(WalkRW2l(α=0.4,safety=true), target=:speed=>0.45, varying=:P)
+nsteps = 15
+δs = zeros(nsteps); δs[Int((nsteps+1)/2)] = 0.05
+nominalmsr=optwalk(wstar4s, nsteps, boundarywork=false, δs=δs)
+
+# WalkRW2ls has varying step lengths according to preferred human
+wstar4vs = findgait(WalkRW2ls(α=0.4,safety=true), target=:speed=>0.45, varying=:P, cstep=0.35, vmstar=wstar4s.vm)
+varyingmsr = optwalk(wstar4vs, nsteps, boundarywork=false,δs=δs)
+plot(cumsum(nominalmsr.steps.tf), nominalmsr.steps.vm,label="normal")
+plot!(cumsum(varyingmsr.steps.tf), varyingmsr.steps.vm, label="varying", )
+
+# step timings, per step
+plot(cumsum(nominalmsr.steps.tf),nominalmsr.steps.tf)
+plot!(cumsum(varyingmsr.steps.tf),varyingmsr.steps.tf)

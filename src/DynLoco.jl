@@ -13,6 +13,8 @@ export findgait
 abstract type Walk end
 abstract type AbstractWalkRW2 <: Walk end
 
+include("WalkRW2ls.jl") # varying step length model
+
 """
     w = WalkRW2l(vm, P, α, γ, L, M, g, parms, limitcycle)
 
@@ -38,6 +40,7 @@ albeit very slowly if given insufficient forward speed.
     limitcycle = (parms = (:vm,), f = w -> onestep(w).vm - w.vm)
     safety = false # safety keeps model from falling backward if not enough momentum
 end
+
 
 export StepResults, MultiStepResults
 
