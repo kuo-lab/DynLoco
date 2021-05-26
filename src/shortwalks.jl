@@ -7,14 +7,14 @@ default(grid=false, fontfamily="Helvetica") # no grid on plots
 # Take walks of varying distances, and show how the optimal trajectory is to have a bell-shaped
 # velocity profile, with peak speed that increases with distance up to about 12 steps.
 # The cost function is total work, plus a linear cost of time with coefficient ctime.
-wstar4 = findgait(WalkRW2l(α=0.35), target=:speed=>0.3, varying=:P)
+wstar4 = findgait(WalkRW2l(α=0.35,safety=true), target=:speed=>0.3, varying=:P)
 ctime = 0.012 # cost of time, to encourage hurrying
 tchange = 2
 p = plot()
 walksteps = [1, 2, 3, 4, 5, 6, 7, 10, 15, 20] # take walks of this # of steps
 results = Array{MultiStepResults,1}(undef,0) # store each optimization result here
 for (i,nsteps) in enumerate(walksteps)
-    result = optwalktime(wstar4, nsteps, ctime=ctime) # optimize with a cost of time
+    result = optwalktime(wstar4, nsteps, ctime=ctime,negworkcost=0.2) # optimize with a cost of time
     plotvees!(result, tchange=tchange, usespline=true, color=i, rampuporder=1, markersize=2) # plot instantaneous speed vs. time
     push!(results, result) # add this optimization to results array
 end

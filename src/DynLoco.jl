@@ -629,7 +629,8 @@ time expected of the nominal `w` on level ground. `startv` initial guess at spee
 See also `optwalk` and `optwalkslope`
 """
 function optwalktime(w::W, nsteps=5; boundaryvels::Union{Tuple,Nothing} = (0.,0.), safety=true,
-    ctime = 0.05, tchange = 3., boundarywork = true, δs = zeros(nsteps), startv = w.vm, walkparms...) where W <: Walk
+    ctime = 0.05, tchange = 3., boundarywork = true, δs = zeros(nsteps), startv = w.vm, negworkcost = 0., walkparms...) where W <: Walk
+    #println("walkparms = ", walkparms)
     w = W(w; walkparms...)
     optsteps = Model(optimizer_with_attributes(Ipopt.Optimizer, "print_level"=>1))
     @variable(optsteps, P[1:nsteps]>=0, start=w.P) # JuMP variables P
@@ -641,16 +642,20 @@ function optwalktime(w::W, nsteps=5; boundaryvels::Union{Tuple,Nothing} = (0.,0.
     end
     register(optsteps, :onestepv, 3, (v,P,δ)->onestep(w,P=P,vm=v,δangle=δ,safety=safety).vm, autodiff=true) # input P, output vm
     register(optsteps, :onestept, 3, (v,P,δ)->onestep(w,P=P,vm=v,δangle=δ,safety=safety).tf, autodiff=true)
+    register(optsteps, :onestepc, 3, (v,P,δ)->onestep(w,P=P,vm=v,δangle=δ,safety=safety).C, autodiff=true)
+    register(optsteps, :onestepcps, 3, (v,P,δ)->onestep(w,P=P,vm=v,δangle=δ,safety=safety).costperstep, autodiff=true)
     @NLexpression(optsteps, steptime[i=1:nsteps], onestept(v[i],P[i],δs[i]))
     @NLexpression(optsteps, totaltime, sum(onestept(v[i],P[i],δs[i]) for i = 1:nsteps))
     for i = 1:nsteps # collocation points
         @NLconstraint(optsteps, v[i+1]==onestepv(v[i],P[i],δs[i]))
     end
     if boundarywork
-        @NLobjective(optsteps, Min, 1/2*(sum(P[i]^2 for i=1:nsteps) + v[1]^2 - boundaryvels[1]^2) +
+#        @NLobjective(optsteps, Min, 1/2*(sum(P[i]^2 for i=1:nsteps) + negworkcost*sum(onestepc(v[i],P[i],δs[i])^2 for i=1:nsteps) + v[1]^2 - boundaryvels[1]^2 + negworkcost*(-boundaryvels[2]^2+v[nsteps+1]^2)) +
+ #           ctime*totaltime)
+         @NLobjective(optsteps, Min, 1/2*(sum(P[i]^2 for i=1:nsteps) + 0.22*(sum(v[i]^3.16 for i=1:nsteps) + negworkcost*sum(onestepc(v[i],P[i],δs[i])^2 for i=1:nsteps) + v[1]^2 - boundaryvels[1]^2 + negworkcost*(-boundaryvels[2]^2+v[nsteps+1]^2)) +
             ctime*totaltime)
     else
-        @NLobjective(optsteps, Min, 1/2*(sum(P[i]^2 for i=1:nsteps)) +
+        @NLobjective(optsteps, Min, 1/2*(sum(P[i]^2 for i=1:nsteps) + negworkcost*sum(onestepc(v[i],P[i],δs[i])^2 for i=1:nsteps)) +
             ctime*totaltime)
     end
     optimize!(optsteps)
