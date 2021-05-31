@@ -22,24 +22,42 @@ Plots.display(p) # instantaneous speed vs. distance profiles
 savefig(p, "shortwalks.svg")
 savefig(p, "shortwalks.pdf")
 
-## Temp stuff, a changing step length; seems to work!
+## Short walks with speed-dependent step lengths, linearized step length 
 wstar4s = findgait(WalkRW2ls(α=0.35,safety=true), target=:speed=>0.3, varying=:P)
-ctime = 0.012 # cost of time, to encourage hurrying
-tchange = 2
+wstar4s = WalkRW2ls(wstar4s, vmstar=wstar4s.vm, cstep = 0.2)
+ctime = 0.04 # cost of time, to encourage hurrying
+tchange = 3
 p = plot()
 walksteps = [1, 2, 3, 4, 5, 6, 7, 10, 15, 20] # take walks of this # of steps
 resultss = Array{MultiStepResults,1}(undef,0) # store each optimization result here
 for (i,nsteps) in enumerate(walksteps)
     result = optwalktime(wstar4s, nsteps, ctime=ctime) # optimize with a cost of time
-    plotvees!(result, tchange=tchange, usespline=true, color=i, rampuporder=1, markersize=2) # plot instantaneous speed vs. time
+    plotvees!(result, tchange=tchange, usespline=false, color=i, speedtype=:stride, rampuporder=1, markersize=2) # plot instantaneous speed vs. time
+    push!(resultss, result) # add this optimization to results array
+end
+Plots.display(p) # instantaneous speed vs. distance profiles
+
+# TODO: Something fishy about how :step speeds are plotted, need to fix
+
+# Variable step lengths, using the v^0.42 curve
+wstar4vs = findgait(WalkRW2lvs(α=0.35,safety=true), target=:speed=>0.3, varying=:P)
+ctime = 0.012 # cost of time, to encourage hurrying
+tchange = 3
+p = plot()
+walksteps = [1, 2, 3, 4, 5, 6, 7, 10, 15, 20] # take walks of this # of steps
+resultss = Array{MultiStepResults,1}(undef,0) # store each optimization result here
+for (i,nsteps) in enumerate(walksteps)
+    result = optwalktime(wstar4vs, nsteps, ctime=ctime) # optimize with a cost of time
+    plotvees!(result, tchange=tchange, usespline=true, speedtype=:stride, color=i, rampuporder=1, markersize=2) # plot instantaneous speed vs. time
     push!(resultss, result) # add this optimization to results array
 end
 Plots.display(p) # instantaneous speed vs. distance profiles
 
 
-## Try plotting stride speeds
 
-function stridespeeds(steps)
+## Try plotting stride speeds (this section should be deprecated)
+
+function stridespeeds(steps) # actually these are step speeds
     steptimes = [steps.tf; tchange]
     stepdistances = [steps.steplength; 0]
     return cumsum([0;steptimes],dims=1), [0; stepdistances./steptimes]
@@ -121,10 +139,10 @@ for (j, ctime) in enumerate(ctimes)
     for (i,nsteps) in enumerate(walksteps)
         result = results[i,j]
 
-        plotvees!(result, tchange=tchange, color=i, usespline=:false, markersize=2, subplot=j+1,
+        plotvees!(result, tchange=tchange, color=i, usespline=:false, speedtype=:step,markersize=2, subplot=j+1,
             xticks = [20,40], yticks=[0.2,0.4,0.6],xguide="",yguide="",tickfontsize=4,
             xlims=(0,maximum(durations)+2tchange), ylims=(0,maximum(peaks))) # plot instantaneous speed vs. time
-        plotvees!(result, tchange=tchange, color=i, usespline=:false, markersize=2, tscale = tbase/(durations[end,j]), 
+        plotvees!(result, tchange=tchange, color=i, usespline=:false, speedtype=:step,markersize=2, tscale = tbase/(durations[end,j]), 
             vscale = vbase/peaks[end,j],subplot=1)
     end
 end
@@ -138,6 +156,49 @@ savefig("selfsimilarity.svg")
 # plotlyJS did export fonts, not necessarily the right one
 # pyplot doesn't preserve fonts, but does export eps
 
+## Short walks: Varying ctimes to demonstrate self-similarity, and varying step lengths
+wstar4 = findgait(WalkRW2l(α=0.35), target=:speed=>0.3, varying=:P)
+wstar4vs = findgait(WalkRW2ls(α=0.35, safety=true), target=:speed=>0.3, varying=:P)
+ctimes = range(0.006, 0.06, length=6)
+tchange = 2
+layout = @layout[ a{0.85w} grid(6,1)]
+p = plot(;layout)
+peaks = zeros(length(walksteps),length(ctimes),2)
+durations = similar(peaks)
+walksteps = [2, 3, 4, 5, 6, 7, 10, 15, 20] # take walks of this # of steps
+results = Array{MultiStepResults,3}(undef,(length(walksteps),length(ctimes),2)) # store each optimization result here
+for (k,w) in enumerate((wstar4, wstar4s))
+for (j,ctime) in enumerate(ctimes)
+    for (i,nsteps) in enumerate(walksteps)
+        result = optwalktime(w, nsteps, ctime=ctime) # optimize with a cost of time
+        #peaks[i,j] = maximum(result.steps.vm)
+        peaks[i,j,k] = maximum(stridespeeds(result.steps)[2])
+        durations[i,j,k] = result.totaltime
+        results[i,j,k] = result
+    end
+end
+end
+# after the fact, let's plot them all on top of each other
+# using the ctime=0.02 result as the basis
+tbase = durations[end,2,1]
+vbase = peaks[end,2,1]
+for (k,w) in enumerate((wstar4, wstar4s))
+for (j, ctime) in enumerate(ctimes)
+    for (i,nsteps) in enumerate(walksteps)
+        result = results[i,j,k]
+
+        plotvees!(result, tchange=tchange, color=i, usespline=:false, speedtype=:step,markersize=2, subplot=j+1,
+            xticks = [20,40], yticks=[0.2,0.4,0.6],xguide="",yguide="",tickfontsize=4,
+            xlims=(0,maximum(durations)+2tchange), ylims=(0,maximum(peaks))) # plot instantaneous speed vs. time
+        plotvees!(result, tchange=tchange, color=i, usespline=:false, speedtype=:step,markersize=2, tscale = tbase/(durations[end,j,1]), 
+            vscale = vbase/peaks[end,j,1],subplot=1)
+    end
+end
+end
+Plots.display(p) 
+println("Durations of a factor of ", (durations[end,1]+2tchange)/(durations[end,end]+2tchange))
+println("Peak speeds over a range of ", peaks[end,end]/peaks[end,1])
+println("  about ", peaks[end,1]*sqrt(9.81)," to ", peaks[end,end]*sqrt(9.81), "m/s")
 
 
 
@@ -152,6 +213,7 @@ savefig("selfsimilarity.svg")
 # Make plots comparing up, level, down for various numbers of steps
 wstar4s = findgait(WalkRW2l(α=0.4,safety=true), target=:speed=>0.4, varying=:P)
 myslope = 0.08
+ctime = 0.02
 p = plot(layout=(3,1))
 for (i,nsteps) = enumerate([5, 10, 15])
     resultlevel = optwalktime(wstar4s, nsteps, ctime = ctime)
@@ -188,7 +250,7 @@ for slope in myslopes
 end
 Plots.display(p)
 
-## Short walks: Varying step lengths
+## Short walks: Varying fixed step lengths
 # Shorter steps will yield a more plateaued speed profile.
 # Longer steps will reach more of a rounded profile with bigger range of speeds.
 # (This optimization allows for faster speeds at short steps, due to a lack of
@@ -437,11 +499,12 @@ end
 
 ## Receding horizon MPC walking over a bump
 wstar4s = findgait(WalkRW2l(α=0.4,safety=true), target=:speed=>0.45, varying=:P)
-nsteps = 15
-δs = zeros(nsteps); δs[Int((nsteps+1)/2)] = 0.05
+nsteps = 21
+tfstar = onestep(wstar4s).tf
+δs = zeros(nsteps); δs[floor(Int,(nsteps+1)/2)] = 0.05
 nominalmsr=optwalk(wstar4s, nsteps, boundarywork=false, δs=δs)
 plotvees(nominalmsr,speedtype=:midstance,usespline=false,boundaryvels=(wstar4s.vm,wstar4s.vm),tchange=0)
-nhorizon = 12 # so far we shouldn't reduce the horizon much
+nhorizon = 13 # so far we shouldn't reduce the horizon much
 # because we're assuming you want to match a twin brother at horizon
 # but we could also try to match our original plan
 
@@ -469,8 +532,10 @@ for i in 1:nsteps-1 # receding horzion; don't optimize the last step
     mpcsteps[i] = nextstep 
     println("nextstepvm = ", nextstep.vm, "  result.vm = ", nominalmsr.steps[i].vm)
     #@assert isapprox(nextstep.vm, nominalmsr.steps[i].vm, atol=1e-4) # check whether the steps agree
-    plot!(cumsum([elapsedtime;nextmsr.steps[1:end-1].tf]),
-        [nextstep.vm0;nextmsr.steps.vm[1:end-1]],show=true)
+    #plot!(cumsum([elapsedtime;nextmsr.steps[1:end-1].tf]),
+    #    [nextstep.vm0;nextmsr.steps.vm[1:end-1]],show=true)
+    plot!(cumsum([elapsedtime;nextmsr.steps[1].tf]),
+        [nextstep.vm0;nextmsr.steps.vm[1]],show=true)
     remainingtime = remainingtime - nextstep.tf
     # set up for the next one
     currentvm0 = nextstep.vm
@@ -487,11 +552,19 @@ nsteps = 15
 nominalmsr=optwalk(wstar4s, nsteps, boundarywork=false, δs=δs)
 
 # WalkRW2ls has varying step lengths according to preferred human
-wstar4vs = findgait(WalkRW2ls(α=0.4,safety=true), target=:speed=>0.45, varying=:P, cstep=0.35, vmstar=wstar4s.vm)
-varyingmsr = optwalk(wstar4vs, nsteps, boundarywork=false,δs=δs)
+wstar4ls = findgait(WalkRW2ls(α=0.4,safety=true), target=:speed=>0.45, varying=:P, cstep=0.35, vmstar=wstar4s.vm)
+wstar4lvs = findgait(WalkRW2lvs(α=0.4,safety=true), target=:speed=>0.45, varying=:P, c=1., vmstar=wstar4s.vm)
+varyingmsr = optwalk(wstar4ls, nsteps, boundarywork=false,δs=δs)
+varyingmsrv = optwalk(wstar4lvs, nsteps, boundarywork=false,δs=δs)
+plotvees(nominalmsr,boundaryvels=(nothing,nothing), speedtype=:stride)
+plotvees!(varyingmsr,boundaryvels=(nothing,nothing), speedtype=:stride)
+plotvees!(varyingmsrv,boundaryvels=(nothing,nothing), speedtype=:stride)
+
 plot(cumsum(nominalmsr.steps.tf), nominalmsr.steps.vm,label="normal")
 plot!(cumsum(varyingmsr.steps.tf), varyingmsr.steps.vm, label="varying", )
 
 # step timings, per step
 plot(cumsum(nominalmsr.steps.tf),nominalmsr.steps.tf)
 plot!(cumsum(varyingmsr.steps.tf),varyingmsr.steps.tf)
+
+

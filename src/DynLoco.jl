@@ -650,10 +650,11 @@ function optwalktime(w::W, nsteps=5; boundaryvels::Union{Tuple,Nothing} = (0.,0.
         @NLconstraint(optsteps, v[i+1]==onestepv(v[i],P[i],δs[i]))
     end
     if boundarywork
-#        @NLobjective(optsteps, Min, 1/2*(sum(P[i]^2 for i=1:nsteps) + negworkcost*sum(onestepc(v[i],P[i],δs[i])^2 for i=1:nsteps) + v[1]^2 - boundaryvels[1]^2 + negworkcost*(-boundaryvels[2]^2+v[nsteps+1]^2)) +
- #           ctime*totaltime)
-         @NLobjective(optsteps, Min, 1/2*(sum(P[i]^2 for i=1:nsteps) + 0.22*(sum(v[i]^3.16 for i=1:nsteps) + negworkcost*sum(onestepc(v[i],P[i],δs[i])^2 for i=1:nsteps) + v[1]^2 - boundaryvels[1]^2 + negworkcost*(-boundaryvels[2]^2+v[nsteps+1]^2)) +
+        @NLobjective(optsteps, Min, 1/2*(sum(P[i]^2 for i=1:nsteps) + negworkcost*sum(onestepc(v[i],P[i],δs[i])^2 for i=1:nsteps) + v[1]^2 - boundaryvels[1]^2 + negworkcost*(-boundaryvels[2]^2+v[nsteps+1]^2)) +
             ctime*totaltime)
+ #        @NLobjective(optsteps, Min, 1/2*(sum(P[i]^2 for i=1:nsteps) + 0.22*(sum(v[i]^3.16 for i=1:nsteps) + 
+ #           negworkcost*sum(onestepc(v[i],P[i],δs[i])^2 for i=1:nsteps) + v[1]^2 - boundaryvels[1]^2 + negworkcost*(-boundaryvels[2]^2+v[nsteps+1]^2)) +
+ #           ctime*totaltime) # TODO problem here
     else
         @NLobjective(optsteps, Min, 1/2*(sum(P[i]^2 for i=1:nsteps) + negworkcost*sum(onestepc(v[i],P[i],δs[i])^2 for i=1:nsteps)) +
             ctime*totaltime)
