@@ -557,17 +557,17 @@ plotvees!(results::MultiStepResults; veeparms...) = plotvees!(Plots.CURRENT_PLOT
 
 function plotvees!(p::Union{Plots.Plot,Plots.Subplot}, msr::MultiStepResults; tchange = 3, boundaryvels = (0.,0.),
     color = :auto, usespline=true, rampuporder = 2, tscale = 1, vscale = 1, speedtype = :step, plotoptions...)
-    if speedtype == :stride
-        v = [0; msr.vm0; msr.steps.steplength ./ msr.steps.tf; msr.vm0]*vscale
-        times = cumsum([0; tchange; msr.steps.tf*tscale; tchange])
-        #stepdistances = [0; steps.steplength; 0]
-        #return cumsum(steptimes,dims=1), stepdistances./steptimes
-    elseif speedtype == :step # step speeds
+    if speedtype == :shortwalks # to match short walks paper
+        v = [0; msr.vm0; msr.steps.steplength ./ msr.steps.tf; msr.vm0; 0]*vscale
+        times = cumsum([0; tchange; tchange; msr.steps.tf*tscale; tchange]) # where we padded by tchange
+        # where start at 0, then take tchange time to initiate vm0, then take tchange to initiate actual v, 
+        # then take each step with v point showing velocity of the step starting at the time point
+    elseif speedtype == :step # step speeds, step lengths divided by step times, mid-stance to mid-stance
         steptimes = [msr.steps.tf; tchange]
         stepdistances = [msr.steps.steplength; 0]
         times = cumsum([0; msr.steps.tf*tscale; tchange], dims=1)
         v = [0; stepdistances./steptimes]*vscale
-    elseif speedtype == :midstance
+    elseif speedtype == :midstance # speed sampled at mid-stance
         v = [boundaryvels[1]; msr.vm0; msr.steps.vm; boundaryvels[2]]*vscale # vm0 is the speed at beginning of first step, vm is the mid-stance speed of first step
         times = cumsum([0; tchange; msr.steps.tf*tscale; tchange]) # add up step times, starting from ramp-up
     else 
