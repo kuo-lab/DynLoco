@@ -78,11 +78,10 @@ function onestep(w::WalkRW2ls; vm=w.vm, P=w.P, δangle = 0.,
     steplength = 2L*sin(newα) # rimless wheel step length
     tf = tf1 + tf2 # total time mid-stance to mid-stance
     speed = steplength / tf # average speed mid-stance to mid-stance
-    costperstep = 1/2*P^2
     return (vm=vmnew, θnew=θnew, tf=tf, P=P, C=C, Pwork=Pwork,Cwork=Cwork,
         speed=speed, steplength=steplength, stepfrequency=speed/steplength,tf1=tf1, tf2=tf2,
         Ωminus=Ωminus,Ωplus=Ωplus,
-        vm0=vm,δ=δangle,costperstep=costperstep)
+        vm0=vm,δ=δangle)
 end
 
 # step length varying s = c*v^β
@@ -155,9 +154,8 @@ function onestep(w::WalkRW2lvs; vm=w.vm, P=w.P, δangle = 0.,
     steplength = 2L*sin(newα) # rimless wheel step length
     tf = tf1 + tf2 # total time mid-stance to mid-stance
     speed = steplength / tf # average speed mid-stance to mid-stance
-    costperstep = 1/2*P^2
     return (vm=vmnew, θnew=θnew, tf=tf, P=P, C=C, Pwork=Pwork,Cwork=Cwork,
         speed=speed, steplength=steplength, stepfrequency=speed/steplength,tf1=tf1, tf2=tf2,
         Ωminus=Ωminus,Ωplus=Ωplus,
-        vm0=vm,δ=δangle,costperstep=costperstep)
+        vm0=vm,δ=δangle)
 end
