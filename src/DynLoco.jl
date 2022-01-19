@@ -783,8 +783,8 @@ export optwalkvar
 """
     optwalkvar(w::Walk, numsteps=5)
 
-Optimizes variance to walk `numsteps` steps. Returns a `MultiStepResults`
-struct. Allows slopes to be specified as keyword `δs` array of the slope of each successive
+Minimizes variance to walk `numsteps` steps. Returns a `MultiStepResults`
+struct. As in a "tight regulation" control. Allows slopes to be specified as keyword `δs` array of the slope of each successive
 step.
 
 Other keyword arguments: `boundaryvels = (vm,vm)` can specify a tuple of initial and
