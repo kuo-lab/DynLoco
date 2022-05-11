@@ -13,6 +13,8 @@ export findgait
 abstract type Walk end
 abstract type AbstractWalkRW2 <: Walk end
 
+include("WalkRW2ls.jl") # varying step length model
+
 """
     w = WalkRW2l(vm, P, α, γ, L, M, g, parms, limitcycle)
 
@@ -36,8 +38,9 @@ albeit very slowly if given insufficient forward speed.
     g = 1.  # gravitational acceleration
     parms = (:α, :γ, :L, :M, :g) # a list of the model parameters
     limitcycle = (parms = (:vm,), f = w -> onestep(w).vm - w.vm)
-    safety = false # model falls backward if not enough momentum
+    safety = false # safety keeps model from falling backward if not enough momentum
 end
+
 
 export StepResults, MultiStepResults
 
@@ -70,7 +73,7 @@ struct StepResults
     Ωminus
     Ωplus
     vm0    # middle-stance velocity at start of step
-    δ      # slope wrt horizontal
+    δ      # slope of landing step + wrt level 
 end
 
 function Base.show(io::IO, w::W) where W <: Walk
@@ -111,7 +114,7 @@ struct MultiStepResults
     totalcost
     totaltime
     vm0             # initial speed
-    δangles         # angles
+    δangles         # angles, defined positive wrt nominal γ from preceding step
     boundaryvels::Tuple
 end
 
@@ -269,8 +272,8 @@ function findgait(w::W, target::Tuple{Vararg{Pair}}, varying::Tuple) where W <: 
     if termination_status(model) == MOI.LOCALLY_SOLVED || termination_status(model) == MOI.OPTIMAL
         optimal_solution = value.(var[i] for i in 1:nvars) # e.g. P, vm, etc. (JuMP.value returns optima)
     else
+        println("termination: ", termination_status(model))
         error("The model was not solved correctly.")
-        println(termination_status(model))
     end
     # produce a new Walk struct
     assignedoptimalparms = (; zip(varying, optimal_solution)...) # P = 0.17, etc.
@@ -379,7 +382,7 @@ multistepplot
                    ([0.5;1:n;n+0.5], [v[1]-boundaryvels[1]; P; NaN]) # just plot the push-offs
     end
 
-    if doslope
+    if doslope # draw the terrain heights (cumulative sum of angles)
         @series begin
             subplot := 3
             yguide := "Terrain height"
@@ -408,8 +411,8 @@ the same time expected of the nominal `w` on level ground.
 See also `optwalkslope`
 """
 function optwalk(w::W, numsteps=5; boundaryvels::Union{Tuple,Nothing} = nothing,
-    boundarywork = true, totaltime=numsteps*onestep(w).tf,
-    δ = zeros(numsteps)) where W <: Walk # default to taking the time of regular steady walking
+    boundarywork::Union{Tuple{Bool,Bool},Bool} = (true,true), totaltime=numsteps*onestep(w).tf,
+    δs = zeros(numsteps)) where W <: Walk # default to taking the time of regular steady walking
 
     optsteps = Model(optimizer_with_attributes(Ipopt.Optimizer, "print_level"=>0))
     @variable(optsteps, P[1:numsteps]>=0, start=w.P) # JuMP variables P
@@ -419,8 +422,14 @@ function optwalk(w::W, numsteps=5; boundaryvels::Union{Tuple,Nothing} = nothing,
         boundaryvels = (w.vm, w.vm) # default to given gait if nothing specified
     end
 
-    if !boundarywork # no hip work at beginning or end; apply boundary velocity constraints
+    if typeof(boundarywork) <: Bool
+        boundarywork = (boundarywork, boundarywork)
+    end
+
+    if !boundarywork[1] # no hip work at beginning or end; apply boundary velocity constraints
         @constraint(optsteps, v[1] == boundaryvels[1])
+    end
+    if !boundarywork[2]
         @constraint(optsteps, v[numsteps+1] == boundaryvels[2])
     end
 
@@ -431,14 +440,14 @@ function optwalk(w::W, numsteps=5; boundaryvels::Union{Tuple,Nothing} = nothing,
     register(optsteps, :onestept, 3, # time after a step
         (v,P,δ)->onestep(w,P=P,vm=v, δangle=δ).tf, autodiff=true)
     @NLexpression(optsteps, summedtime, # add up time of all steps
-        sum(onestept(v[i],P[i],δ[i]) for i = 1:numsteps))
+        sum(onestept(v[i],P[i],δs[i]) for i = 1:numsteps))
     for i = 1:numsteps  # step dynamics
-        @NLconstraint(optsteps, v[i+1]==onestepv(v[i],P[i],δ[i]))
+        @NLconstraint(optsteps, v[i+1]==onestepv(v[i],P[i],δs[i]))
     end
     @NLconstraint(optsteps, summedtime == totaltime) # total time
 
-    if boundarywork
-        @objective(optsteps, Min, 1/2*(sum((P[i]^2 for i=1:numsteps))+v[1]^2-boundaryvels[1]^2)) # minimum pos work
+    if boundarywork[1]
+        @objective(optsteps, Min, 1/2*(sum((P[i]^2 for i=1:numsteps))+v[1]^2-boundaryvels[1]^2)+0*(v[end]^2-boundaryvels[2]^2)) # minimum pos work
     else
         @objective(optsteps, Min, 1/2*sum((P[i]^2 for i=1:numsteps))) # minimum pos work
     end
@@ -449,8 +458,9 @@ function optwalk(w::W, numsteps=5; boundaryvels::Union{Tuple,Nothing} = nothing,
         error("The model was not solved correctly.")
         println(termination_status(optsteps))
     end
-    return multistep(W(w,vm=value(v[1])), value.(P), δ, vm0=value(v[1]), boundaryvels=boundaryvels,
-        extracost = boundarywork ? 1/2*(value(v[1])^2 - boundaryvels[1]^2) : 0) #, optimal_solution
+
+    return multistep(W(w,vm=value(v[1])), value.(P), δs, vm0=value(v[1]), boundaryvels=boundaryvels,
+        extracost = boundarywork[1] ? 1/2*(value(v[1])^2 - boundaryvels[1]^2)+0/2*(value(v[end])^2-boundaryvels[2]^2) : 0) #, optimal_solution
 end
 
 """
@@ -536,6 +546,9 @@ export plotvees, plotvees!
 
 Plots a series of discrete speeds for multiple steps, along with a spline
 to connect the discrete points. Returns a `Plot` struct. See also plotvees!(p, ...).
+Other options: usespline = true, color = :auto, rampuporder = 2, tscale = 1, vscale = 1,
+speedtype = :stride vs :midstance (default stride speed is stride length divided by stride 
+time between footfalls; midstance explicitly includes ramp-up and -down profiles)
 """
 plotvees(results::MultiStepResults; veeparms...) = plotvees!(plot(), results; veeparms...)
 
@@ -543,17 +556,32 @@ plotvees(results::MultiStepResults; veeparms...) = plotvees!(plot(), results; ve
 plotvees!(results::MultiStepResults; veeparms...) = plotvees!(Plots.CURRENT_PLOT.nullableplot, results; veeparms...)
 
 function plotvees!(p::Union{Plots.Plot,Plots.Subplot}, msr::MultiStepResults; tchange = 3, boundaryvels = (0.,0.),
-    color = :auto, usespline=true, splineorder = 2, rampuporder = 2, plotoptions...)
-    v = [msr.vm0; msr.steps.vm] # vm0 is the speed at beginning of first step, vm is the mid-stance speed of first step
+    color = :auto, usespline=true, rampuporder = 2, tscale = 1, vscale = 1, speedtype = :step, plotoptions...)
+    if speedtype == :shortwalks # to match short walks paper
+        v = [0; msr.vm0; msr.steps.steplength ./ msr.steps.tf; msr.vm0; 0]*vscale
+        times = cumsum([0; tchange; tchange; msr.steps[1:end-1].tf*tscale; msr.steps[end].tf*tscale-tchange*0.3;tchange*1.3]) # where we padded by tchange
+        # where start at 0, then take tchange time to initiate vm0, then take tchange to initiate actual v, 
+        # then take each step with v point showing velocity of the step starting at the time point
+    elseif speedtype == :step # step speeds, step lengths divided by step times, mid-stance to mid-stance
+        steptimes = [msr.steps.tf; tchange]
+        stepdistances = [msr.steps.steplength; 0]
+        times = cumsum([0; msr.steps.tf*tscale; tchange], dims=1)
+        v = [0; stepdistances./steptimes]*vscale
+    elseif speedtype == :midstance # speed sampled at mid-stance
+        v = [boundaryvels[1]; msr.vm0; msr.steps.vm; boundaryvels[2]]*vscale # vm0 is the speed at beginning of first step, vm is the mid-stance speed of first step
+        times = cumsum([0; tchange; msr.steps.tf*tscale; tchange]) # add up step times, starting from ramp-up
+    else 
+        error("Option speedtype unrecognized: ", 2)
+    end
     n = length(msr.steps)
-    times = cumsum([tchange; msr.steps.tf]) # add up step times, starting from ramp-up
     # make smooth ramp-up in speed
     t0 = range(0, tchange, length=10)
-    vstart = v[1]*(t0/tchange).^rampuporder      # ramp-up in speed, monomial degree ramporder
-    vend = v[n+1]*(1 .- t0/tchange).^rampuporder # ramp-down in speed
+    vstart = msr.vm0*(t0/tchange).^rampuporder      # ramp-up in speed, monomial degree ramporder
+    vend = msr.vm0*(1 .- t0/tchange).^rampuporder # ramp-down in speed
     if usespline     # make a smooth spline from discrete velocities
-        k = splineorder # spline order
-        println("spline order = ", k)
+        k = rampuporder # spline order
+        println("times " ,times)
+        println("v = ", v)
         if length(v) > 2 # enough points to make splines from v alone
             spline = Spline1D(times, v; k=k)
         else # only say 1 point, so let's pad v with the ramp-up ramp-down
@@ -561,12 +589,23 @@ function plotvees!(p::Union{Plots.Plot,Plots.Subplot}, msr::MultiStepResults; tc
                 [vstart[1]; v; vend[end]], k=k)
         end
         tspline = range(times[1], times[end], length=20)
-        plot!(p,[t0; tspline; t0 .+ times[end]], [vstart; spline.(tspline); vend], color=color;
+        plot!(p,tspline, spline.(tspline), color=color;
             plotoptions...)
+        #plot!(p,[t0; tspline; t0 .+ times[end]], [vstart; spline.(tspline); vend], color=color;
+        #    plotoptions...)
+        twhole = [t0; tspline; t0 .+ times[end]]
+        vwhole = [vstart; spline.(tspline); vend]
+        tsteady = twhole[vwhole .>= 0.9*maximum(vwhole)]
+        taccel = twhole[0.1*maximum(vwhole) .<= vwhole .< 0.9*maximum(vwhole)]
+        tspeedup = taccel[taccel .< 0.5*twhole[end]]
+        tslowdown = taccel[taccel .>= 0.5*twhole[end]]
+        println(tspeedup[end]-tspeedup[1], " ", taccel[end]-taccel[1], " ", tslowdown[end]-tslowdown[1])
     end
-    plot!(p, times, v, seriestype=:scatter, legend=:none, color=color, # dots for discrete velocities
+    plot!(p, times, v, legend=:none, color=color; plotoptions...)
+    plot!(p, times, v, seriestype=:scatter, markeralpha=0.1, legend=:none, color=color, # dots for discrete velocities
         xguide="time", yguide="speed"; plotoptions...)
 end
+
 
 
 using JuMP, Ipopt
@@ -590,31 +629,44 @@ time expected of the nominal `w` on level ground. `startv` initial guess at spee
 See also `optwalk` and `optwalkslope`
 """
 function optwalktime(w::W, nsteps=5; boundaryvels::Union{Tuple,Nothing} = (0.,0.), safety=true,
-    ctime = 0.05, tchange = 3., boundarywork = true, δs = zeros(nsteps), startv = w.vm, walkparms...) where W <: Walk
+    ctime = 0.05, tchange = 3., boundarywork = true, δs = zeros(nsteps), startv = w.vm, negworkcost = 0., walkparms...) where W <: Walk
+    #println("walkparms = ", walkparms)
     w = W(w; walkparms...)
     optsteps = Model(optimizer_with_attributes(Ipopt.Optimizer, "print_level"=>1))
     @variable(optsteps, P[1:nsteps]>=0, start=w.P) # JuMP variables P
-    # constraints: start
-    if length(startv) == 1
+    # constraints: starting guess for velocities
+    if length(startv) == 1 # startv can be just a scalar, a 1-element vector, or n elements
         @variable(optsteps, v[1:nsteps+1]>=0, start=startv)
     else # starting guess for v is an array
         @variable(optsteps, v[i=1:nsteps+1]>=0, start=startv[i])
     end
     register(optsteps, :onestepv, 3, (v,P,δ)->onestep(w,P=P,vm=v,δangle=δ,safety=safety).vm, autodiff=true) # input P, output vm
     register(optsteps, :onestept, 3, (v,P,δ)->onestep(w,P=P,vm=v,δangle=δ,safety=safety).tf, autodiff=true)
+    register(optsteps, :onestepc, 3, (v,P,δ)->onestep(w,P=P,vm=v,δangle=δ,safety=safety).C, autodiff=true)
+    register(optsteps, :onestepcps, 3, (v,P,δ)->onestep(w,P=P,vm=v,δangle=δ,safety=safety).costperstep, autodiff=true)
     @NLexpression(optsteps, steptime[i=1:nsteps], onestept(v[i],P[i],δs[i]))
     @NLexpression(optsteps, totaltime, sum(onestept(v[i],P[i],δs[i]) for i = 1:nsteps))
     for i = 1:nsteps # collocation points
         @NLconstraint(optsteps, v[i+1]==onestepv(v[i],P[i],δs[i]))
     end
     if boundarywork
-        @NLobjective(optsteps, Min, 1/2*(sum(P[i]^2 for i=1:nsteps) + v[1]^2 - boundaryvels[1]^2) +
+        @NLobjective(optsteps, Min, 1/2*(sum(P[i]^2 for i=1:nsteps) + negworkcost*sum(onestepc(v[i],P[i],δs[i])^2 for i=1:nsteps) + v[1]^2 - boundaryvels[1]^2 + negworkcost*(-boundaryvels[2]^2+v[nsteps+1]^2)) +
             ctime*totaltime)
+ #        @NLobjective(optsteps, Min, 1/2*(sum(P[i]^2 for i=1:nsteps) + 0.22*(sum(v[i]^3.16 for i=1:nsteps) + 
+ #           negworkcost*sum(onestepc(v[i],P[i],δs[i])^2 for i=1:nsteps) + v[1]^2 - boundaryvels[1]^2 + negworkcost*(-boundaryvels[2]^2+v[nsteps+1]^2)) +
+ #           ctime*totaltime) # TODO problem here
     else
-        @NLobjective(optsteps, Min, 1/2*(sum(P[i]^2 for i=1:nsteps)) +
+        @NLobjective(optsteps, Min, 1/2*(sum(P[i]^2 for i=1:nsteps) + negworkcost*sum(onestepc(v[i],P[i],δs[i])^2 for i=1:nsteps)) +
             ctime*totaltime)
     end
     optimize!(optsteps)
+    if termination_status(optsteps) == MOI.LOCALLY_SOLVED || termination_status(optsteps) == MOI.OPTIMAL
+        optimal_solution = (vms=value.(v), Ps=value.(P))
+    else
+        error("The model was not solved correctly.")
+        println(termination_status(optsteps))
+    end
+
     result = multistep(W(w,vm=value(v[1]),safety=safety), value.(P), δs, vm0=value(v[1]),
         boundaryvels=boundaryvels, extracost = ctime*value(totaltime) +
         (boundarywork ? 1/2*(value(v[1])^2-boundaryvels[1]^2) : 0))
@@ -630,6 +682,12 @@ returns nearly the same gait conditions for the next step.
 """
 islimitcycle(w::Walk) = onestep(w).vm ≈ w.vm
 
+export stepspeeds
+function stridespeeds(steps; tchange = 1)
+    steptimes = [steps.tf; tchange]
+    stepdistances = [steps.steplength; 0]
+    return cumsum([0;steptimes],dims=1), [0; stepdistances./steptimes]
+end
 
 # Optimize walking to match a velocity profile
 # function optwalkvel(w::Walk, vels; boundaryvels::Union{Tuple,Nothing} = nothing,
@@ -677,6 +735,117 @@ islimitcycle(w::Walk) = onestep(w).vm ≈ w.vm
 #         extracost = boundarywork ? 1/2*(value(v[1])^2 - boundaryvels[1]^2) : 0) #, optimal_solution
 # end
 
+# take a terrain and perform an mpc with each step
+# let's pretend you're going to take nhorizon steps that are going to
+# take you , I'm assuming you give us a nominal limit cycle
+#= function mpcstep(w::W, nsteps, nhorizon, δangles=zeros(nsteps); vm0 = w.vm,
+                 boundaryvels=(), extracost = 0) where W <: Walk
+    steps = StructArray{StepResults}(undef, nsteps)
+    vm = vm0
+    tfstar = onestep(w).tf
+    elapsedtime = 0
+    timeleft = totaltime - nsteps*tf
+    paddedδangles = [δangles; zeros(nsteps)]
+    currentheight = 0
+    for i in 1:nsteps
+        myhorizon = min(nhorizon, nsteps-i+1)
+        upcomingheightchange = sum(δangles[i:mhorizon])
+        heightchangetonow = sum([0; δangles[1:i-1]])
+        upcomingδs = [δangles[i:myhorizon]; heightchangetonow-upcomingheightchange]
+        upcomingtime = (myhorizon+1)*tf
+        # do an optimization 
+        optmsr = optwalk(w, myhorizon+1; boundaryvels = (vm,vm0), boundarywork=false, totaltime=5)
+        firststep = optmsr.steps[1]
+        #steps[i] = StepResults(onestep(w, P=Ps[i], δangle=δangles[i])...)
+        timeleft = timeleft - steps[i].tf
+        elapsedtime = elapsedtime + firststep.tf
+        vm = steps[i].vm
+    end
+    totalcost = sum(steps[i].Pwork for i in 1:length(Ps)) + extracost
+    # 1/2 (v[1]^2-boundaryvels[1]^2)
+    totaltime = sum(getfield.(steps,:tf))
+    finalvm = w.vm
+    return MultiStepResults(steps, totalcost, totaltime, vm0, δangles, boundaryvels)
+    # boundaryvels is just passed forward to plots
+end =#
 
+# I should also do something where we minimize the deviation in speed and
+# see how costly that is
+
+# minimum speed deviation; try to keep a smooth speed throughout despite bumps
+# 
+
+export multistep
+
+
+export optwalkvar
+
+"""
+    optwalkvar(w::Walk, numsteps=5)
+
+Minimizes variance to walk `numsteps` steps. Returns a `MultiStepResults`
+struct. As in a "tight regulation" control. Allows slopes to be specified as keyword `δs` array of the slope of each successive
+step.
+
+Other keyword arguments: `boundaryvels = (vm,vm)` can specify a tuple of initial and
+final speeds, default nominal middle-stance speed `vm`. To start and end at rest, use `(0,0)`.
+`boundarywork = true` whether cost includes the work needed to
+start and end from `boundaryvels`. `totaltime` is the total time to take the steps, by default
+the same time expected of the nominal `w` on level ground.
+"""
+function optwalkvar(w::W, numsteps=5; boundaryvels::Union{Tuple,Nothing} = nothing,
+    boundarywork::Union{Tuple{Bool,Bool},Bool} = (true,true), totaltime=numsteps*onestep(w).tf,
+    δs = zeros(numsteps)) where W <: Walk # default to taking the time of regular steady walking
+
+    optsteps = Model(optimizer_with_attributes(Ipopt.Optimizer, "print_level"=>0))
+    @variable(optsteps, P[1:numsteps]>=0, start=w.P) # JuMP variables P
+    @variable(optsteps, v[1:numsteps+1]>=0, start=w.vm) # mid-stance speeds
+
+    if boundaryvels === nothing || isempty(boundaryvels)
+        boundaryvels = (w.vm, w.vm) # default to given gait if nothing specified
+    end
+
+    if typeof(boundarywork) <: Bool
+        boundarywork = (boundarywork, boundarywork)
+    end
+
+    if !boundarywork[1] # no hip work at beginning or end; apply boundary velocity constraints
+        @constraint(optsteps, v[1] == boundaryvels[1])
+    end
+    if !boundarywork[2]
+        @constraint(optsteps, v[numsteps+1] == boundaryvels[2])
+    end
+
+    # Constraints
+    # produce separate functions for speeds and step times
+    register(optsteps, :onestepv, 3, # velocity after a step
+        (v,P,δ)->onestep(w,P=P,vm=v, δangle=δ).vm, autodiff=true) # output vm
+    register(optsteps, :onestept, 3, # time after a step
+        (v,P,δ)->onestep(w,P=P,vm=v, δangle=δ).tf, autodiff=true)
+    @NLexpression(optsteps, summedtime, # add up time of all steps
+        sum(onestept(v[i],P[i],δs[i]) for i = 1:numsteps))
+    @NLexpression(optsteps, nominaltime, onestept(w.vm,w.P,0)) # nominaltime
+    @NLexpression(optsteps, variance,
+        sum((onestepv(v[i],P[i],δs[i])-w.vm)^2 for i=1:numsteps))
+    for i = 1:numsteps  # step dynamics
+        @NLconstraint(optsteps, v[i+1]==onestepv(v[i],P[i],δs[i]))
+    end
+    @NLconstraint(optsteps, summedtime == totaltime) # total time
+
+    #@objective(optsteps, Min, 1/2*sum((v[i]-w.vm)^2 for i=1:numsteps)) # minimum variance of mid-stance velocity
+    @NLobjective(optsteps, Min, 1/2*sum((onestept(v[i],P[i],δs[i])-nominaltime)^2 for i=1:numsteps))
+
+    optimize!(optsteps)
+    if termination_status(optsteps) == MOI.LOCALLY_SOLVED || termination_status(optsteps) == MOI.OPTIMAL
+        optimal_solution = (vms=value.(v), Ps=value.(P))
+    else
+        error("The model was not solved correctly.")
+        println(termination_status(optsteps))
+    end
+
+    return multistep(W(w,vm=value(v[1])), value.(P), δs, vm0=value(v[1]), boundaryvels=boundaryvels) #, optimal_solution
+end
+
+include("optwalktriangle.jl") #
 
 end # Module
