@@ -846,4 +846,6 @@ function optwalkvar(w::W, numsteps=5; boundaryvels::Union{Tuple,Nothing} = nothi
     return multistep(W(w,vm=value(v[1])), value.(P), δs, vm0=value(v[1]), boundaryvels=boundaryvels) #, optimal_solution
 end
 
+include("optwalktriangle.jl") #
+
 end # Module

@@ -41,25 +41,34 @@ tchange = 1.75
 p = plot()
 walksteps = [1, 2, 3, 4, 5, 6, 7, 10, 15, 20] # take walks of this # of steps
 results43 = Array{MultiStepResults,1}(undef,0) # store each optimization result here
+results = Array{MultiStepResults,1}(undef,0) # store each optimization result here
 results44 = Array{MultiStepResults,1}(undef,0) # store each optimization result here
+peakspds = zeros(length(walksteps))
 peakspds43 = zeros(length(walksteps))
 peakspds44 = zeros(length(walksteps))
+durations = zeros(length(walksteps))
 durations43 = zeros(length(walksteps))
 durations44 = zeros(length(walksteps))
 for (i,nsteps) in enumerate(walksteps)
-    result = optwalktime(wsteps[1], nsteps, ctime=ctimes[1])#,negworkcost=0.2) # optimize with a cost of time
+    result = optwalktime(wsteplens[1], nsteps, ctime=ctimes[1])#,negworkcost=0.2) # optimize with a cost of time
     plotvees!(result, tchange=tchange, usespline=false, color=i, speedtype=:shortwalks, rampuporder=1, markersize=2) # plot instantaneous speed vs. time
     push!(results43, result) # add this optimization to results array
     peakspds43[i] = maximum(stepspeeds(result.steps)[2])
     durations43[i] = result.totaltime
-    distances43[i] = sum(result.steps.steplength)
-    result = optwalktime(wsteps[3], nsteps, ctime=ctimes[3])#,negworkcost=0.2) # optimize with a cost of time
+    result = optwalktime(wsteplens[2], nsteps, ctime=ctimes[1])#,negworkcost=0.2) # optimize with a cost of time
+    plotvees!(result, tchange=tchange, usespline=false, color=i, speedtype=:shortwalks, rampuporder=1, markersize=2) # plot instantaneous speed vs. time
+    push!(results, result) # add this optimization to results array
+    peakspds[i] = maximum(stepspeeds(result.steps)[2])
+    durations[i] = result.totaltime
+    result = optwalktime(wsteplens[3], nsteps, ctime=ctimes[3])#,negworkcost=0.2) # optimize with a cost of time
     plotvees!(result, tchange=tchange, usespline=false, color=i, speedtype=:shortwalks, rampuporder=1, markersize=2) # plot instantaneous speed vs. time
     push!(results44, result) # add this optimization to results array
     peakspds44[i] = maximum(stepspeeds(result.steps)[2])
     durations44[i] = result.totaltime
-    distances44[i] = sum(result.steps.steplength)
 end # longer steps took longer and resulted in almost same peak speed but of course traveled farther
+distances43 = [sum(result.steps.steplength) for result in results43]
+distances = [sum(result.steps.steplength) for result in results]
+distances44 = [sum(result.steps.steplength) for result in results44]
 Plots.display(p) # instantaneous speed vs. distance profiles
 # Longer steps are more costly because of collisions, but doesn't change peak speed much
 # and does increase total time, and slightly increase average speed
@@ -155,32 +164,45 @@ end
 # using the ctime=0.02 result as the basis
 tbase = durations[end,2]
 vbase = peaks[end,2]
-layout = @layout[ a{0.85w} grid(6,1)]
-p = plot(;layout)
-Plots.display(p) 
+#layout = @layout[ a{0.85w} grid(6,1)]
+pleft = plot(; )#@layout [grid(1,3); a{0.86h}])
+pright = plot(; layout=grid(6,1))
+ptop = plot(; layout=grid(1,3))
+#p = plot(;layout)
+#Plots.display(p) 
 for (j, ctime) in enumerate(ctimes)
     for (i,nsteps) in enumerate(walksteps)
         result = results[i,j]
-        plotvees!(result, tchange=tchange, color=i, usespline=:false, speedtype=:shortwalks,markersize=0, subplot=j+1,
+        plotvees!(pright,result, tchange=tchange, color=i, usespline=:false, speedtype=:shortwalks,markersize=0, subplot=j,
             xticks = [20,40], yticks=[0.2,0.4,0.6],xguide="",yguide="",tickfontsize=4,
             xlims=(0,maximum(durations)+3tchange), ylims=(0,maximum(peaks)), linewidth=0.5) # subplot instantaneous speed vs. time
-        plotvees!(result, tchange=tchange, color=i, usespline=:false, speedtype=:shortwalks,markersize=2, tscale = tbase/(durations[end,j]), 
+        plotvees!(pleft,result, tchange=tchange, color=i, usespline=:false, speedtype=:shortwalks,markersize=2, tscale = tbase/(durations[end,j]), 
             vscale = vbase/peaks[end,j],subplot=1) # main scaled speed vs time
     end
 end
 for (i,result) in enumerate(resultvss) # add in the variable step length results computed above in resultvss
-    plotvees!(result, tchange=tchange, usespline=false, speedtype=:shortwalks, color=i, markersize=2, linestyle=:dashdot,subplot=1,
+    plotvees!(pleft,result, tchange=tchange, usespline=false, speedtype=:shortwalks, color=i, markersize=2, linestyle=:dashdot,subplot=1,
     tscale = tbase/(durationvss[end]),vscale = vbase/peakspdvss[end]) # plot instantaneous speed vs. time
+    plotvees!(ptop,result, tchange=tchange, color=i, usespline=:false, speedtype=:shortwalks,markersize=0, 
+        xticks = [20,40], yticks=[0.2,0.4,0.6],subplot=2,xguide="",yguide="",tickfontsize=4,
+        xlims=(0,maximum(durations)+3tchange), ylims=(0,maximum(peaks)), linewidth=0.5)
 end
 for (i,result) in enumerate(results43) # add in shorter steps
-    plotvees!(result, tchange=tchange, color=i, usespline=:false, speedtype=:shortwalks,markersize=2, tscale = tbase/(durations43[end]), 
+    plotvees!(pleft,result, tchange=tchange, color=i, usespline=:false, speedtype=:shortwalks,markersize=2, tscale = tbase/(durations43[end]), 
         vscale = vbase/peakspds43[end],subplot=1, linestyle=:dash)
+    plotvees!(ptop,result, tchange=tchange, color=i, usespline=:false, speedtype=:shortwalks,markersize=0, 
+        xticks = [20,40], yticks=[0.2,0.4,0.6],subplot=1,xguide="",yguide="",tickfontsize=4,
+        xlims=(0,maximum(durations)+3tchange), ylims=(0,maximum(peaks)), linewidth=0.5)
 end
 for (i,result) in enumerate(results44) # add in longer steps
-    plotvees!(result, tchange=tchange, color=i, usespline=:false, speedtype=:shortwalks,markersize=2, tscale = tbase/(durations44[end]), 
+    plotvees!(pleft,result, tchange=tchange, color=i, usespline=:false, speedtype=:shortwalks,markersize=2, tscale = tbase/(durations44[end]), 
         vscale = vbase/peakspds44[end],subplot=1, linestyle=:dot)
+    plotvees!(ptop,result, tchange=tchange, color=i, usespline=:false, speedtype=:shortwalks,markersize=0,  
+        xticks = [20,40], yticks=[0.2,0.4,0.6],subplot=3, xguide="",yguide="",tickfontsize=4,
+        xlims=(0,maximum(durations)+3tchange), ylims=(0,maximum(peaks)), linewidth=0.5)
 end
-
+plot(ptop, pleft, pright, layout= @layout [ [a{0.15h}; b] c{0.15w}])
+#plot(pleft, pright, layout=grid(1,2,widths=(0.85,0.15)))
 Plots.display(p)
 println("Durations of a factor of ", (durations[end,1]+2tchange)/(durations[end,end]+2tchange))
 println("Peak speeds over a range of ", peaks[end,end]/peaks[end,1])
@@ -771,3 +793,40 @@ nbump = Int((nsteps+1)/2)
 reactmsr1 = multistep(wstar4s, Ps=fill(wstar4s.P,nbump),δangles=δs[1:nbump],boundaryvels=(wstar4s.vm,wstar4s.vm))
 reactmsr2 = optwalk(wstar4s, nsteps-nbump, totaltime = nominalmsr.totaltime - reactmsr1.totaltime - 2,boundaryvels=(reactmsr1.steps[end].vm,wstar4s.vm), boundarywork=(false,false))
 multistepplot(reactmsr2)
+
+
+
+## Triangle walk, based on min var walk
+# Short walks: Walk a certain number of steps, with minimum energy-time vs steady minCOT
+# where it's possible to stay almost exactly at minCOT, except for start-up 
+# this is like trapezoidal, but using an objective to make every step have same speed
+wstar4s = findgait(WalkRW2l(α=0.35,safety=true), target=:speed=>0.5, varying=:P)
+wstar4n = findgait(WalkRW2l(α=0.35, safety=true), target=:speed=>0.4, varying=:P)
+nsteps = 10
+ctime = 0.0195
+tchange = 1.75
+nominalmsr=optwalktime(wstar4s, nsteps, ctime = ctime, boundarywork=true) # to compare with our usual solution
+minvarmsr=optwalkvar(wstar4n, nsteps, boundarywork=true)
+A = 1.9*wstar4s.vm/(nsteps*onestep(wstar4s).tf)
+v0 = 0.11#0.8*A*tchange#0.12
+mintrimsr=optwalktriangle(wstar4n, nsteps, A = A, boundarywork=false,boundaryvels=(v0,v0))
+p = plot(layout=(1,2))
+plotvees!(p[1],nominalmsr, tchange=tchange, rampuporder=1, usespline = false, markershape=:circle,speedtype=:shortwalks)
+plotvees!(p[1],minvarmsr, tchange=tchange, rampuporder=1, usespline = false,markershape=:circle, speedtype=:shortwalks)
+plotvees!(p[1],mintrimsr, tchange=tchange, rampuporder=1, usespline = false,markershape=:circle, speedtype=:shortwalks)
+plot!(p[2],[0:nsteps+1], [1/2*nominalmsr.vm0^2; nominalmsr.steps.Pwork; NaN],markershape=:circle)
+#plot!(p[2],[0:nsteps+1], [NaN; nominalmsr.steps.Cwork; -1/2*nominalmsr.steps[end].vm0^2], markershape=:circle)
+plot!(p[2],[0:nsteps+1], [1/2*minvarmsr.vm0^2; minvarmsr.steps.Pwork; NaN],markershape=:circle,xticks=0:nsteps+1)
+#plot!(p[2],[0:nsteps+1], [NaN; minvarmsr.steps.Cwork; -1/2*minvarmsr.steps[end].vm0^2], markershape=:circle)
+plot!(p[2],[0:nsteps+1], [1/2*mintrimsr.vm0^2; mintrimsr.steps.Pwork; NaN],markershape=:circle,xticks=0:nsteps+1)
+#plot!(p[2],[0:nsteps+1], [NaN; mintrimsr.steps.Cwork; -1/2*minvarmsr.steps[end].vm0^2], markershape=:circle)
+plot!(p[2],xlabel="step", ylabel="push-off work", legend=false)
+Plots.display(p)
+
+#savefig("threehypotheses.pdf")
+println("energy-time work = ", 1/2*nominalmsr.vm0^2 + sum(nominalmsr.steps.Pwork))
+println("max steady = ", 1/2*minvarmsr.vm0^2 + sum(minvarmsr.steps.Pwork))
+println("triangle   = ", 1/2*mintrimsr.vm0^2 + sum(mintrimsr.steps.Pwork))
+println("ratio = ",  (1/2*minvarmsr.vm0^2 + sum(minvarmsr.steps.Pwork))/(1/2*nominalmsr.vm0^2 + sum(nominalmsr.steps.Pwork)) )
+println("ratio = ",  (1/2*mintrimsr.vm0^2 + sum(mintrimsr.steps.Pwork))/(1/2*nominalmsr.vm0^2 + sum(nominalmsr.steps.Pwork)) )
+#println("ratio = ",  (sum(minvarmsr.steps.Pwork))/(sum(nominalmsr.steps.Pwork)) )
