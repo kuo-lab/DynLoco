@@ -14,7 +14,7 @@ walksteps = [2, 3, 4, 5, 6, 7, 10, 15, 20] # take walks of this # of steps
 results = Array{MultiStepResults,1}(undef,0) # store each optimization result here
 for (i,nsteps) in enumerate(walksteps)
     result = optwalktime(wstar4, nsteps, ctime=ctime) # optimize with a cost of time
-    plotvees!(result, tchange=tchange, color=i, rampuporder=1, markersize=2) # plot instantaneous speed vs. time
+    plotvees!(result, tchange=tchange, color=i, rampuporder=1, markersize=2, splineorder=0) # plot instantaneous speed vs. time
     push!(results, result) # add this optimization to results array
 end
 Plots.display(p) # instantaneous speed vs. distance profiles

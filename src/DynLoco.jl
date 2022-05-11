@@ -543,7 +543,7 @@ plotvees(results::MultiStepResults; veeparms...) = plotvees!(plot(), results; ve
 plotvees!(results::MultiStepResults; veeparms...) = plotvees!(Plots.CURRENT_PLOT.nullableplot, results; veeparms...)
 
 function plotvees!(p::Union{Plots.Plot,Plots.Subplot}, msr::MultiStepResults; tchange = 3, boundaryvels = (0.,0.),
-    color = :auto, usespline=true, rampuporder = 2, plotoptions...)
+    color = :auto, usespline=true, splineorder = 2, rampuporder = 2, plotoptions...)
     v = [msr.vm0; msr.steps.vm] # vm0 is the speed at beginning of first step, vm is the mid-stance speed of first step
     n = length(msr.steps)
     times = cumsum([tchange; msr.steps.tf]) # add up step times, starting from ramp-up
@@ -552,7 +552,8 @@ function plotvees!(p::Union{Plots.Plot,Plots.Subplot}, msr::MultiStepResults; tc
     vstart = v[1]*(t0/tchange).^rampuporder      # ramp-up in speed, monomial degree ramporder
     vend = v[n+1]*(1 .- t0/tchange).^rampuporder # ramp-down in speed
     if usespline     # make a smooth spline from discrete velocities
-        k = 2 # spline order
+        k = splineorder # spline order
+        println("spline order = ", k)
         if length(v) > 2 # enough points to make splines from v alone
             spline = Spline1D(times, v; k=k)
         else # only say 1 point, so let's pad v with the ramp-up ramp-down
