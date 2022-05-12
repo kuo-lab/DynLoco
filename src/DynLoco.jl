@@ -262,10 +262,10 @@ function findgait(w::W, target::Tuple{Vararg{Pair}}, varying::Tuple) where W <: 
         # each fv[i] is a registered JuMP function fvi with automatic differentiation.
         register(model, Symbol("fv", i), nvars, fv[i], autodiff=true)
         if i < nvars # each constraint function should be matched to its target value
-            JuMP.add_NL_constraint(model, :($(Symbol("fv",i))($(var...)) == 0.))
+            JuMP.add_nonlinear_constraint(model, :($(Symbol("fv",i))($(var...)) == 0.))
         else # Final constraint is always limit cycle onestep.vm == vm
             # this parses to fvi[var[1],var[2]...] == var[nvars] (which is vm)
-            JuMP.add_NL_constraint(model, :($(Symbol("fv",i))($(var...)) == $(var[nvars])))
+            JuMP.add_nonlinear_constraint(model, :($(Symbol("fv",i))($(var...)) == $(var[nvars])))
         end
     end # loop over targets
     optimize!(model)
