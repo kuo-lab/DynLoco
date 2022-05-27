@@ -94,7 +94,7 @@ plot!(vs0, label="demeaned v*") # so linearly predicted v resembles computed opt
 
 
 
-# so A*h = (v-mean(v)), and you can also go backward
+# so A*h = (v-mean(v)), and you can also go backward, yielding the impulse response
 plot(A[8:end,1:15] \ (pv))
 
 # we can invert the A (bump) matrix to get the impulse response
