@@ -5,7 +5,8 @@ default(grid=false, fontfamily="Helvetica") # no grid on plots
 
 demeanandnormalize(response, normfactor, withmean=mean(response)) = (response .- withmean) ./ normfactor
 wstar4s = findgait(WalkRW2l(α=0.4,safety=true), target=:speed=>0.45, varying=:P)
-nsteps = 15
+t0 = onestep(wstar4s).tf # nominal step time
+nsteps = 15; window = nsteps; halfwindow = (window+1) ÷ 2
 δou = zeros(nsteps); δou[Int((nsteps+1)/2)] = 0.05
 oumsr=optwalk(wstar4s, nsteps, boundarywork=false, δs=δou)
 h = demeanandnormalize(convert(Vector{Float64},oumsr.steps.vm),0.05) # normalized impulse response
@@ -21,12 +22,61 @@ udmsr=optwalk(wstar4s, nsteps, boundarywork=false, δs=δud)
 hud = demeanandnormalize(convert(Vector{Float64},udmsr.steps.vm),0.05)
 plotvees(udmsr,speedtype=:midstance,usespline=false,boundaryvels=(wstar4s.vm,wstar4s.vm),tchange=0)
 
+## Simulate a stretch of uneven terrain
+nterrain = 100
+δs = rand(nterrain)./10
+coefs = hcat(0:nterrain-1,ones(nterrain))\δs # slope and offset
+δs .= δs .- hcat(0:nterrain-1,ones(nterrain))*coefs # detrend the bumps
+nominalmsr=optwalk(wstar4s, nterrain, boundarywork=false, δs=δs)
+plotvees(nominalmsr,speedtype=:midstance,usespline=false,boundaryvels=(wstar4s.vm,wstar4s.vm),tchange=0)
+vs = convert(Vector{Float64}, nominalmsr.steps.vm)
+vs0 = vs .- nominalmsr.vm0
+ts = convert(Vector{Float64}, nominalmsr.steps.tf)
+ts0 = ts .- t0
+
+## Assemble bumps and impulse response
+# Make a square Toeplitz matrix from the bumps
+A = TriangularToeplitz(δs,:L)
+pv = A[:,1:nsteps]*h
+pv = pv[halfwindow:end] # remove first steps
+plot(pv,label="predicted v")
+plot!(vs0, label="demeaned v*") # so linearly predicted v resembles computed optimum
+# So a convolution of bumps and impulse response
+# does a good job of predicting the velocities
+
+# so A*h = (v-mean(v)), and you can also go backward, yielding the impulse response
+# we can invert the A (bump) matrix to get the impulse response
+plot(h,label="optimal up",title="Optima h and regressed h")
+plot!(A[halfwindow:end,1:window] \ vs0[1:end-halfwindow+1],label="pinv response")
 
 
-plot([hd[1]; hd[1:end-1]])
-hlate = [hd[1]; hd[1:end-1]]
-plot(hlate.-mean(hlate))
-plot!(h+hlate.-mean(h+hlate))
+## Take a moving average of speeds
+movingaveh = ones(window)./window
+movingavev = conv(movingaveh, vs0)[halfwindow+0:end+1-halfwindow]
+plot(movingavev, title="moving average speed")
+plot!(vs0)
+
+## How well correlated is the moving average with the bumps?
+plot(movingavev .* circshift(δs,20))
+plot!(movingavev .* δs)
+
+
+## we want to do gradient descent, where the
+# error in speed, v-v0 is correlated with 
+
+matrixofcorr = zeros(nterrain,window)
+newh = h.*0
+mu = 0.01
+for i in halfwindow:nterrain-halfwindow+1
+    matrixofcorr[i,:] .= vs0[i]*δs[i-halfwindow+1:i+halfwindow-1]
+    newh .= newh .- mu*(vs0[i]*δs[i-halfwindow+1:i+halfwindow-1])
+end
+plot(newh)
+plot!(h)
+
+
+
+
 
 plot([1 0 0 0 0 0 0 0 0 0 0 0 0 0 0; -1 1 0 0 0 0 0 0 0 0 0 0 0 0 0]*h)
 h0 = h .- mean(h)
@@ -55,14 +105,6 @@ at=Toeplitz([1, -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
 
 
 
-nsteps = 100
-δs = rand(nsteps)./10
-coefs = hcat(0:nsteps-1,ones(nsteps))\δs # slope and offset
-δs .= δs .- hcat(0:nsteps-1,ones(nsteps))*coefs # detrend the bumps
-nominalmsr=optwalk(wstar4s, nsteps, boundarywork=false, δs=δs)
-plotvees(nominalmsr,speedtype=:midstance,usespline=false,boundaryvels=(wstar4s.vm,wstar4s.vm),tchange=0)
-vs = convert(Vector{Float64}, nominalmsr.steps.vm)
-vs0 = vs .- nominalmsr.vm0
 # we think there is a sequence h * b = v that will
 # produce the desired speed sequence. 
 # convolution is sum h(i)*b(n-i) or sum b(i)*h(n-i)
@@ -82,24 +124,6 @@ vs0 = vs .- nominalmsr.vm0
 #     [b9 b8 b7]
 
 # integral from 0 to t of u(tau)*h(t-tau) dtau
-
-# Make a square Toeplitz matrix from the bumps
-A = TriangularToeplitz(δs,:L)
-plot(A[:,1:15]*h)
-pv = A[:,1:15]*h
-pv = pv[8:end] # remove first steps
-
-plot(pv,label="predicted v")
-plot!(vs0, label="demeaned v*") # so linearly predicted v resembles computed optimum
-
-
-
-# so A*h = (v-mean(v)), and you can also go backward, yielding the impulse response
-plot(A[8:end,1:15] \ (pv))
-
-# we can invert the A (bump) matrix to get the impulse response
-plot(h,label="optimal up")
-plot!(A[8:end,1:15] \ vs0[1:end-7],label="pinv response")
 
 
 #
