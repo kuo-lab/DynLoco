@@ -1,5 +1,5 @@
 using DynLoco
-using Plots, Statistics, ToeplitzMatrices
+using Plots, Statistics, ToeplitzMatrices, DSP
 plotlyjs() # Use this backend to preserve fonts on export to SVG or PDF
 default(grid=false, fontfamily="Helvetica") # no grid on plots
 
@@ -46,13 +46,13 @@ plot!(vs0, label="demeaned v*") # so linearly predicted v resembles computed opt
 
 # so A*h = (v-mean(v)), and you can also go backward, yielding the impulse response
 # we can invert the A (bump) matrix to get the impulse response
-plot(h,label="optimal up",title="Optima h and regressed h")
+plot(h,label="optimal up",title="Optimal h and regressed h")
 plot!(A[halfwindow:end,1:window] \ vs0[1:end-halfwindow+1],label="pinv response")
 
 
 ## Take a moving average of speeds
-movingaveh = ones(window)./window
-movingavev = conv(movingaveh, vs0)[halfwindow+0:end+1-halfwindow]
+movingavekernel = ones(window)./window
+movingavev = conv(movingavekernel, vs0)[halfwindow+0:end+1-halfwindow] # moving average speed error
 plot(movingavev, title="moving average speed")
 plot!(vs0)
 
@@ -62,19 +62,36 @@ plot!(movingavev .* δs)
 
 
 ## we want to do gradient descent, where the
-# error in speed, v-v0 is correlated with 
+# error in speed, v-v0 is correlated with the bumps
 
 matrixofcorr = zeros(nterrain,window)
 newh = h.*0
 mu = 0.01
 for i in halfwindow:nterrain-halfwindow+1
     matrixofcorr[i,:] .= vs0[i]*δs[i-halfwindow+1:i+halfwindow-1]
-    newh .= newh .- mu*(vs0[i]*δs[i-halfwindow+1:i+halfwindow-1])
+    newh .= newh .- mu*(vs0[i-1]*δs[i-halfwindow+1:i+halfwindow-1])
 end
-plot(newh)
+plot(newh*1000) # it has roughly the right shape
 plot!(h)
 
-
+## Now do the same thing, except take a walk using the h0
+vmprev = wstar4s.vm
+for i in 1:nterrain
+    # calculate the next v using the impulse response
+    # transform the v into appropriate P, using onestepp
+    # apply that step
+    # evaluate the time, speed, energy cost
+    # correlate time error with bump
+    # correlate energy error with bump
+    # make adjustment to the impulse response with
+    # stochastic gradient descent
+    osr = onestep(wstar4, vm=vmprev, P=Ps[i], δangle=δs[i])
+    vees[i] = osr.vm
+    taus[i] = osr.tf
+    vmprev = osr.vm
+    movingaveragev[i] = mean(vees[i-window:i])
+    movingaveraget[i] = mean(taus[i-window:i])
+end
 
 
 
