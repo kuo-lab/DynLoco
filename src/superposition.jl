@@ -110,25 +110,35 @@ end
 plot(vchecks)
 plot!(vs0)
 
+
+## Use convolution to predict the next v and P
 Ps = zeros(nterrain); steptimes = zeros(nterrain); vchecks = zeros(nterrain); vchecks2 = zeros(nterrain)
+terror = zeros(nterrain); workerror = zeros(nterrain)
 vmprev = vstar
 δpad = vcat(zeros(halfwindow-1), δs, zeros(halfwindow-1))
+newh = h#(rand(nsteps) .- 0.5)*0.25#h.*0
+muw = 0.5; mut = 0.5
 for i in 8:length(δpad)-7
     predictedv = sum(reverse(δpad[i-halfwindow+1:i+halfwindow-1]) .* h)
     vchecks[i-7] = predictedv
     stepresult = onestepp(wstar4s; vm=vmprev, vnext=predictedv+vstar, δangle=δpad[i])
-    P = stepresult.P
+    P = stepresult.P # based on our current impulse response, this is the push-off to apply
     Ps[i-7] = P
     steptimes[i-7] = stepresult.tf
     stepresult = onestep(wstar4s, vm=vmprev, P=P, δangle=δpad[i])
     vchecks2[i-7] = stepresult.vm
     vmprev = stepresult.vm
+    terror[i-7] = stepresult.tf - tstar
+    workerror[i-7] = stepresult.Pwork - workstar
+    newh .= newh .- muw*(workerror[i-7]*δpad[i-halfwindow+1:i+halfwindow-1]) .-
+      mut*(terror[i-7]*δpad[i-halfwindow+1:i+halfwindow-1])
 end
 plot(vs0)
 plot!(vchecks, linestyle=:dash) # this is okay
 plot!(vchecks2.-vstar, linestyle=:dash)
 plot(Ps)
 plot!(nominalmsr.steps.P,linestyle=:dash)
+plot(newh)
 
 
 
@@ -136,10 +146,10 @@ matrixofcorr = zeros(nterrain,window)
 newh = h.*0
 muw = 0.01; mut = 0.01
 vmprev = vstar
-vs = zeros(nsteps); Ps = zeros(nsteps); steptimes = zeros(nsteps); terror = zeros(nsteps);
-workerror = zeros(nsteps)
-for i in enumerate(δs)
-    window = min(1, i-halfwindow+1):max(length[δs],i+halfwindow-1)
+vs = zeros(nterrain); Ps = zeros(nterrain); steptimes = zeros(nterrain); terror = zeros(nterrain);
+workerror = zeros(nterrain)
+for i in eachindex(δs)
+    window = min(1, i-halfwindow+1):max(length(δs),i+halfwindow-1)
     predictedv = conv(δs[window], newh)[nsteps-1] + wstar4s.vm
     stepresult = onestepp(wstar4s, vm=vmprev, vmnext=predictedv, δangle=δs[i])
     P, tf = (stepresult.P, stepresult.tf)
