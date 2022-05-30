@@ -95,8 +95,8 @@ for i in eachindex(δs)
     vchecks[i] = stepresult.vm
     vmprev = stepresult.vm
 end
-plot(vchecks)
-plot!(vs)
+plot(vs)
+plot!(vchecks,linestyle=:dashed)
 plot(Ps)
 plot!(nominalmsr.steps.P,linestyle=:dash)
 
@@ -116,17 +116,17 @@ vmprev = vstar
 for i in 8:length(δpad)-7
     predictedv = sum(reverse(δpad[i-halfwindow+1:i+halfwindow-1]) .* h)
     vchecks[i-7] = predictedv
-    stepresult = onestepp(wstar4s; vm=vmprev, vnext=predictedv+vstar, δangle=δpad[i-7])
+    stepresult = onestepp(wstar4s; vm=vmprev, vnext=predictedv+vstar, δangle=δpad[i])
     P = stepresult.P
     Ps[i-7] = P
     steptimes[i-7] = stepresult.tf
-    stepresult = onestep(wstar4s, vm=vmprev, P=P, δangle=δpad[i-7])
+    stepresult = onestep(wstar4s, vm=vmprev, P=P, δangle=δpad[i])
+    vchecks2[i-7] = stepresult.vm
     vmprev = stepresult.vm
-    vchecks2[i-7] = vmprev
 end
-plot(vchecks) # this is okay
-plot!(vs0)
-plot!(vchecks2.-vstar)
+plot(vs0)
+plot!(vchecks, linestyle=:dash) # this is okay
+plot!(vchecks2.-vstar, linestyle=:dash)
 plot(Ps)
 plot!(nominalmsr.steps.P,linestyle=:dash)
 
