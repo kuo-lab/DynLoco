@@ -58,6 +58,7 @@ plot(h,label="optimal up",title="Optima h and regressed h")
 plot!(A[halfwindow:end,1:window] \ vs0[1:end-halfwindow+1],label="pinv response")
 
 
+
 ## Take a moving average of speeds
 movingaveh = ones(window)./window
 movingavev = conv(movingaveh, vs0)[halfwindow+0:end+1-halfwindow]
@@ -82,7 +83,60 @@ end
 plot(newh*1000)
 plot!(h)
 
-## now take some steps
+## now take some steps, replicating the optimum
+Ps = zeros(nterrain); steptimes = zeros(nterrain); vchecks = zeros(nterrain)
+vmprev = vstar
+for i in eachindex(δs)
+    predictedv = vs[i]
+    stepresult = onestepp(wstar4s; vm=vmprev, vnext=predictedv, δangle=δs[i])
+    Ps[i] = stepresult.P
+    steptimes[i] = stepresult.tf
+    stepresult = onestep(wstar4s, vm=vmprev, P=Ps[i], δangle=δs[i])
+    vchecks[i] = stepresult.vm
+    vmprev = stepresult.vm
+end
+plot(vchecks)
+plot!(vs)
+plot(Ps)
+plot!(nominalmsr.steps.P,linestyle=:dash)
+
+## another replication of optimum, but using convolution
+Ps = zeros(nterrain); steptimes = zeros(nterrain); vchecks = zeros(nterrain)
+vmprev = vstar
+for i in 8:length(δs)-7
+    predictedv = sum(reverse(δs[i-halfwindow+1:i+halfwindow-1]) .* h)
+    vchecks[i] = predictedv
+end
+plot(vchecks)
+plot!(vs0)
+
+Ps = zeros(nterrain); steptimes = zeros(nterrain); vchecks = zeros(nterrain)
+vmprev = vstar
+δpad = vcat(zeros(halfwindow), δs, zeros(halfwindow))
+for i in 8:length(δpad)-16
+    predictedv = sum(reverse(δpad[i-halfwindow+1:i+halfwindow-1]) .* h)
+    vchecks[i-7] = predictedv
+end
+plot(vchecks) # this is one sample behind
+plot!(vs0)
+
+
+
+    predictedv = vs[i]
+    stepresult = onestepp(wstar4s; vm=vmprev, vnext=predictedv, δangle=δs[i])
+    Ps[i] = stepresult.P
+    steptimes[i] = stepresult.tf
+    stepresult = onestep(wstar4s, vm=vmprev, P=Ps[i], δangle=δs[i])
+    vchecks[i] = stepresult.vm
+    vmprev = stepresult.vm
+end
+plot(vchecks)
+plot!(vs)
+plot(Ps)
+plot!(nominalmsr.steps.P,linestyle=:dash)
+
+
+
 matrixofcorr = zeros(nterrain,window)
 newh = h.*0
 muw = 0.01; mut = 0.01
