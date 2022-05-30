@@ -110,28 +110,23 @@ end
 plot(vchecks)
 plot!(vs0)
 
-Ps = zeros(nterrain); steptimes = zeros(nterrain); vchecks = zeros(nterrain)
+Ps = zeros(nterrain); steptimes = zeros(nterrain); vchecks = zeros(nterrain); vchecks2 = zeros(nterrain)
 vmprev = vstar
-δpad = vcat(zeros(halfwindow), δs, zeros(halfwindow))
-for i in 8:length(δpad)-16
+δpad = vcat(zeros(halfwindow-1), δs, zeros(halfwindow-1))
+for i in 8:length(δpad)-7
     predictedv = sum(reverse(δpad[i-halfwindow+1:i+halfwindow-1]) .* h)
     vchecks[i-7] = predictedv
-end
-plot(vchecks) # this is one sample behind
-plot!(vs0)
-
-
-
-    predictedv = vs[i]
-    stepresult = onestepp(wstar4s; vm=vmprev, vnext=predictedv, δangle=δs[i])
-    Ps[i] = stepresult.P
-    steptimes[i] = stepresult.tf
-    stepresult = onestep(wstar4s, vm=vmprev, P=Ps[i], δangle=δs[i])
-    vchecks[i] = stepresult.vm
+    stepresult = onestepp(wstar4s; vm=vmprev, vnext=predictedv+vstar, δangle=δpad[i-7])
+    P = stepresult.P
+    Ps[i-7] = P
+    steptimes[i-7] = stepresult.tf
+    stepresult = onestep(wstar4s, vm=vmprev, P=P, δangle=δpad[i-7])
     vmprev = stepresult.vm
+    vchecks2[i-7] = vmprev
 end
-plot(vchecks)
-plot!(vs)
+plot(vchecks) # this is okay
+plot!(vs0)
+plot!(vchecks2.-vstar)
 plot(Ps)
 plot!(nominalmsr.steps.P,linestyle=:dash)
 
