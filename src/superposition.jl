@@ -143,6 +143,7 @@ j = 1 # where we are in δs
 for clump in 1:6
     # take some steps 
     oneclumpv = conv(padme(δs, j-halfwin, j+halfwin), h)[1+halfwin:end-halfwin]
+    vmprev = conv(padme(δs, j-halfwin, j+halfwin), h)[halfwin] + vstar
     for i in 1:nsteps
         osr = onestepp(wstar4s, vm=vmprev, vnext=oneclumpv[i]+vstar, δangle=δs[j]) # this doesn't work
         #osr = onestepp(wstar4s, vm=vmprev, vnext=vs[j], δangle=δs[j])
