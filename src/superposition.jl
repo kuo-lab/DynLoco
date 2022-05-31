@@ -323,3 +323,27 @@ function onestepp(w::WalkRW2l; vm=w.vm, vnext=w.vm, δangle = 0.,
         Ωminus=Ωminus,Ωplus=Ωplus,
         vm0=vm,δ=δangle)
 end
+
+
+"""
+  `padme(array, from, to)``
+
+  zero-padded indexing of `array`, allowing equivalent of `array[from:to]`
+  where padded by zeros if `from <= 1` or `to >= length(array)`.
+  For example, `padme(1:5, -2, 7)` automatically pads by 2 on each end.
+"""
+function padme(x::AbstractArray, from, to) 
+    N = length(x)
+    middlelength = to - from + 1 # length of middle section
+    println("from ", max(1,from), " and to ", min(N,to))
+    numberbefore1 = max(0, 1-from)
+    numberafterN = max(0, to-N)
+    @show numberbefore1
+    @show numberafterN
+    return vcat(zeros(numberbefore1), x[max(1,from):min(N,to)], zeros(numberafterN))
+end
+
+
+padme([1,2,3],-2,5)
+
+
