@@ -55,11 +55,11 @@ plot!(vs0, label="demeaned v*") # so linearly predicted v resembles computed opt
 # so A*h = (v-mean(v)), and you can also go backward, yielding the impulse response
 # we can invert the A (bump) matrix to get the impulse response
 plot(h,label="optimal up",title="Optimal h and regressed h")
-plot!(A[halfwindow:end,1:window] \ vs0[1:end-halfwindow+1],label="pinv response")
+plot!(A[halfwindow:end,1:2*halfwindow-1] \ vs0[1:end-halfwindow+1],label="pinv response")
 
 
 ## Take a moving average of speeds
-movingavekernel = ones(window)./window
+movingavekernel = ones(nsteps)./nsteps
 movingavev = conv(movingavekernel, vs0)[halfwindow+0:end+1-halfwindow] # moving average speed error
 plot(movingavev, title="moving average speed")
 plot!(vs0)
@@ -123,12 +123,55 @@ for i in 1:nterrain
     movingaveraget[i] = mean(taus[i-window:i])
 end
 
+## 
+newh = h * 0
+halfwin = (nsteps-1) ÷ 2
+vpred = conv(δs,h) # a prediction of the speeds
+vmprev = wstar4s.vm
+for i in halfwin+1:length(vpred)-halfwin
+    osr = onestepp(wstar4s, vm=vmprev, vnext = vpred[i], δangle=δ[])
+end
+
+#for i in eachindex(δs)
+i = 1
+oneclumpv = conv(padme(δs, i-halfwin, i+halfwin), h)[1+halfwin:end-halfwin]
 
 
+Ps = zeros(nterrain); taus = zeros(nterrain); vees = zeros(nterrain); vcheck2 = zeros(nterrain)
+vmprev = vstar
+j = 1 # where we are in δs
+for clump in 1:6
+    # take some steps 
+    oneclumpv = conv(padme(δs, j-halfwin, j+halfwin), h)[1+halfwin:end-halfwin]
+    for i in 1:nsteps
+        osr = onestepp(wstar4s, vm=vmprev, vnext=oneclumpv[i]+vstar, δangle=δs[j]) # this doesn't work
+        #osr = onestepp(wstar4s, vm=vmprev, vnext=vs[j], δangle=δs[j])
+        vees[j] = oneclumpv[i] + vstar
+        Ps[j] = osr.P
+        osr2 = onestep(wstar4s, vm=vmprev, P=Ps[j], δangle=δs[j])
+        vcheck2[j] = osr2.vm
+        taus[j] = osr.tf
+        vmprev = oneclumpv[i]+vstar
+        j = j + 1
+    end
+end
+plot(vs); plot!(vees[halfwin+1:end]); plot!(vcheck2)
+plot(pushoffs); plot!(Ps[halfwin+1:end])
 
 
+plot(conv(padme(δs,i-halfwin,i+halfwin),h))
+plot!(conv(padme(δs,i-halfwin,i+halfwin),h)[1+halfwin:end-halfwin])
+#end
 
+msr = multistep(wstar4s, Ps=nominalmsr.steps.P, δangles=δs)
+plot(vs); plot!(msr.steps.vm)
+msr.steps[1]
+onestep(wstar4s, vm=vstar, P=pushoffs[1], δangle=δs[1])
 
+vtest = zeros(length(δs)); for i in eachindex(δs); osr = onestep(wstar4s, vm=vmprev, P=pushoffs[i], δangle=δs[i]); vtest[i] = osr.vm; vmprev=osr.vm; end
+plot(vs); plot!(vtest)
+Ptest = zeros(length(δs)); for i in eachindex(δs); osr = onestepp(wstar4s, vm=vmprev, vnext=vs[i], δangle=δs[i]); Ptest[i] = osr.P; vmprev=osr.vm; end
+plot(pushoffs); plot!(Ptest)
 plot([1 0 0 0 0 0 0 0 0 0 0 0 0 0 0; -1 1 0 0 0 0 0 0 0 0 0 0 0 0 0]*h)
 h0 = h .- mean(h)
 Aa = [ 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0; 
@@ -149,8 +192,7 @@ Aa = [ 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0;
 plot(Aa*h0)
 plot!(hud.-mean(hud))
 
-at=Toeplitz([1, -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-[1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
+
 
 # so toeplitz*h = v
 
@@ -335,15 +377,12 @@ end
 function padme(x::AbstractArray, from, to) 
     N = length(x)
     middlelength = to - from + 1 # length of middle section
-    println("from ", max(1,from), " and to ", min(N,to))
     numberbefore1 = max(0, 1-from)
     numberafterN = max(0, to-N)
-    @show numberbefore1
-    @show numberafterN
     return vcat(zeros(numberbefore1), x[max(1,from):min(N,to)], zeros(numberafterN))
 end
 
 
-padme([1,2,3],-2,5)
+padme([1,2,3],1,3)
 
 
