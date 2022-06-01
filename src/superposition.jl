@@ -73,7 +73,7 @@ plot!(movingavev .* δs)
 ## we want to do gradient descent, where the
 # error in speed, v-v0 is correlated with the bumps
 
-matrixofcorr = zeros(nterrain,window)
+matrixofcorr = zeros(nterrain,nsteps)
 newh = h.*0
 mu = 0.01
 pfig = plot(newh)
@@ -145,7 +145,7 @@ plot(newh)
 
 
 
-matrixofcorr = zeros(nterrain,window)
+matrixofcorr = zeros(nterrain,nsteps)
 newh = h.*0
 muw = 0.01; mut = 0.01
 vmprev = vstar
@@ -200,7 +200,7 @@ oneclumpv = conv(padme(δs, i-halfwin, i+halfwin), h)[1+halfwin:end-halfwin]
 
 
 Ps = zeros(nterrain); taus = zeros(nterrain); vees = zeros(nterrain); vcheck2 = zeros(nterrain)
-vmprev = vstar
+vmprev = vstar; halfwin = 7
 j = 1 # where we are in δs
 for clump in 1:6
     # take some steps 
@@ -218,7 +218,7 @@ for clump in 1:6
         j = j + 1
     end
 end
-plot(vs); plot!(vees[halfwin+1:end]); plot!(vcheck2)
+plot(vs); plot!(vees[halfwin+1:end]); plot!(vcheck2[halfwin+1:end])
 plot(pushoffs); plot!(Ps[halfwin+1:end])
 
 
