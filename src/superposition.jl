@@ -226,6 +226,28 @@ plot(conv(padme(δs,i-halfwin,i+halfwin),h))
 plot!(conv(padme(δs,i-halfwin,i+halfwin),h)[1+halfwin:end-halfwin])
 #end
 
+## take a bunch of single steps (simulation works)
+vees = zeros(nterrain); vcheck2 = zeros(nterrain); Ps = zeros(nterrain); taus = zeros(nterrain)
+movingtau = zeros(nterrain); movingwork = zeros(nterrain)
+for i in 1:nterrain
+    predictedv = sum(reverse(padme(δs,i-halfwindow+1,i+halfwindow-1)) .* h)
+    osr = onestepp(wstar4s, vm=vmprev, vnext=predictedv+vstar, δangle=δs[i]) 
+    osr2 = onestep(wstar4s, vm=vmprev, P=osr.P, δangle=δs[i])
+    vees[i] = predictedv
+    Ps[i] = osr.P
+    taus[i] = osr.tf
+    vmprev = predictedv + vstar
+    vcheck2[i] = osr2.vm
+    movingtau[i] = 1/nsteps*sum(padme(taus,i-nsteps+1,i))
+    movingwork[i] = 1/nsteps*sum(abs2,0.5*padme(Ps,i-2+1,i))
+end
+plot(vs0); plot!(vees); plot!(vcheck2.-vstar) # good
+plot(pushoffs); plot!(Ps) # also good
+plot(nominalmsr.steps.tf); plot!(taus); plot!(movingtau)
+
+
+
+
 msr = multistep(wstar4s, Ps=nominalmsr.steps.P, δangles=δs)
 plot(vs); plot!(msr.steps.vm)
 msr.steps[1]
