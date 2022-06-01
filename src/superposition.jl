@@ -228,7 +228,7 @@ plot!(conv(padme(δs,i-halfwin,i+halfwin),h)[1+halfwin:end-halfwin])
 
 ## take a bunch of single steps (simulation works)
 vees = zeros(nterrain); vcheck2 = zeros(nterrain); Ps = zeros(nterrain); taus = zeros(nterrain)
-movingtau = zeros(nterrain); movingwork = zeros(nterrain)
+movingtau = zeros(nterrain); movingwork = zeros(nterrain); workcorr = zeros(nterrain,nsteps); taucorr = zeros(nterrain,nsteps)
 for i in 1:nterrain
     predictedv = sum(reverse(padme(δs,i-halfwindow+1,i+halfwindow-1)) .* h)
     osr = onestepp(wstar4s, vm=vmprev, vnext=predictedv+vstar, δangle=δs[i]) 
@@ -238,12 +238,18 @@ for i in 1:nterrain
     taus[i] = osr.tf
     vmprev = predictedv + vstar
     vcheck2[i] = osr2.vm
-    movingtau[i] = 1/nsteps*sum(padme(taus,i-nsteps+1,i))
-    movingwork[i] = 1/nsteps*sum(abs2,0.5*padme(Ps,i-2+1,i))
+    movingtau[i] = 1/nsteps*sum(padme(taus,i-nsteps+1,i)) - tstar
+    movingwork[i] = 1/nsteps*sum(abs2,0.5*padme(Ps,i-2+1,i)) - 0.5*Pstar^2
+    if i >= nsteps 
+        workcorr[i,:] = movingwork[i] * padme(δs,i-nsteps+1,i) # should complain about high work
+        taucorr[i,:] = movingtau[i] * padme(δs, i-nsteps+1,i)
+    end
 end
 plot(vs0); plot!(vees); plot!(vcheck2.-vstar) # good
 plot(pushoffs); plot!(Ps) # also good
 plot(nominalmsr.steps.tf); plot!(taus); plot!(movingtau)
+plot(mean(workcorr,dims=1)',title="workcorr")
+plot(mean(taucorr,dims=1)',title="taucorr")
 
 
 
