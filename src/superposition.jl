@@ -248,9 +248,14 @@ end
 plot(vs0); plot!(vees); plot!(vcheck2.-vstar) # good
 plot(pushoffs); plot!(Ps) # also good
 plot(nominalmsr.steps.tf); plot!(taus); plot!(movingtau)
-plot(mean(workcorr,dims=1)',title="workcorr")
-plot(mean(taucorr,dims=1)',title="taucorr")
 
+plot(plot(mean(workcorr,dims=1)',title="workcorr"),
+plot(mean(taucorr,dims=1)',title="taucorr"))
+# when workcorr is high, those are weights that should be reduced to
+# reduce work. When taucorr is high, those are weights that should be
+# reduced to reduce time
+plot(mean(workcorr,dims=1)')
+plot!(0.2*mean(taucorr,dims=1)')
 
 
 
