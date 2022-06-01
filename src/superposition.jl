@@ -55,7 +55,7 @@ plot!(vs0, label="demeaned v*") # so linearly predicted v resembles computed opt
 # so A*h = (v-mean(v)), and you can also go backward, yielding the impulse response
 # we can invert the A (bump) matrix to get the impulse response
 plot(h,label="optimal up",title="Optima h and regressed h")
-plot!(A[halfwindow:end,1:window] \ vs0[1:end-halfwindow+1],label="pinv response")
+plot!(A[halfwindow:end,1:nsteps] \ vs0[1:end-halfwindow+1],label="pinv response")
 
 
 
@@ -72,14 +72,17 @@ plot!(movingavev .* δs)
 
 ## we want to do gradient descent, where the
 # error in speed, v-v0 is correlated with 
-
-matrixofcorr = zeros(nterrain,window)
+# This seems to learn something
+matrixofcorr = zeros(nterrain,nsteps)
 newh = h.*0
 mu = 0.01
+pfig = plot(newh)
 for i in halfwindow:nterrain-halfwindow+1
     matrixofcorr[i,:] .= vs0[i-1]*δs[i-halfwindow+1:i+halfwindow-1]
     newh .= newh .- mu*(vs0[i-1]*δs[i-halfwindow+1:i+halfwindow-1])
+    plot!(pfig, newh)
 end
+display(pfig)
 plot(newh*1000)
 plot!(h)
 
