@@ -16,11 +16,13 @@ oumsr=optwalk(wstar4s, nsteps, boundarywork=false, δs=δou)
 h = demeanandnormalize(convert(Vector{Float64},oumsr.steps.vm),0.05) # normalized impulse response
 plotvees(oumsr,speedtype=:midstance,usespline=false,boundaryvels=(wstar4s.vm,wstar4s.vm),tchange=0)
 
+# downstep
 δod = zeros(nsteps); δod[Int((nsteps+1)/2)] = -0.05
 odmsr=optwalk(wstar4s, nsteps, boundarywork=false, δs=δod)
 hd = demeanandnormalize(convert(Vector{Float64},odmsr.steps.vm),0.05) # normalized down impulse response
 plotvees(odmsr,speedtype=:midstance,usespline=false,boundaryvels=(wstar4s.vm,wstar4s.vm),tchange=0)
 
+# up & down-step
 δud = zeros(nsteps); δud[Int((nsteps+1)/2)] = 0.05; δud[Int((nsteps+1)/2+1)] = -0.05; 
 udmsr=optwalk(wstar4s, nsteps, boundarywork=false, δs=δud)
 hud = demeanandnormalize(convert(Vector{Float64},udmsr.steps.vm),0.05)
@@ -71,7 +73,7 @@ plot!(movingavev .* δs)
 
 
 ## we want to do gradient descent, where the
-# error in speed, v-v0 is correlated with the bumps
+# error in speed, v-v0 is correlated with the bumps 
 
 matrixofcorr = zeros(nterrain,nsteps)
 newh = h.*0
@@ -99,7 +101,7 @@ for i in eachindex(δs)
     vmprev = stepresult.vm
 end
 plot(vs)
-plot!(vchecks,linestyle=:dashed)
+plot!(vchecks,linestyle=:dash)
 plot(Ps)
 plot!(nominalmsr.steps.P,linestyle=:dash)
 
@@ -152,9 +154,9 @@ vmprev = vstar
 vs = zeros(nterrain); Ps = zeros(nterrain); steptimes = zeros(nterrain); terror = zeros(nterrain);
 workerror = zeros(nterrain)
 for i in eachindex(δs)
-    window = min(1, i-halfwindow+1):max(length(δs),i+halfwindow-1)
+    window = max(1, i-halfwindow+1):min(length(δs),i+halfwindow-1)
     predictedv = conv(δs[window], newh)[nsteps-1] + wstar4s.vm
-    stepresult = onestepp(wstar4s, vm=vmprev, vmnext=predictedv, δangle=δs[i])
+    stepresult = onestepp(wstar4s, vm=vmprev, vnext=predictedv, δangle=δs[i])
     P, tf = (stepresult.P, stepresult.tf)
     vs[i] = predictedv
     Ps[i] = P
@@ -166,15 +168,20 @@ for i in eachindex(δs)
 end
 plot(newh*1000)
 plot!(h)
+
 ## Now do the same thing, except take a walk using the h0
 vmprev = wstar4s.vm
 for i in 1:nterrain
     # calculate the next v using the impulse response
     # transform the v into appropriate P, using onestepp
+    stepresult = onestepp(wstar4s, vm=vmprev, vnext=predictedv, δangle=δs[i])
     # apply that step
     # evaluate the time, speed, energy cost
-    # correlate time error with bump
-    # correlate energy error with bump
+    P, tf, Pwork = (stepresult.P, stepresult.tf, stepresult.Pwork)
+    # correlate time error with bump, timeerror should be a moving average
+    terror * δs 
+    # correlate energy error with bump, workerror should be a moving average
+    workerror * δs
     # make adjustment to the impulse response with
     # stochastic gradient descent
     osr = onestep(wstar4, vm=vmprev, P=Ps[i], δangle=δs[i])
