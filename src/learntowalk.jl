@@ -16,6 +16,7 @@ msr = multistep(wstar4, Ps = Ps, δangles=δs)
 # This is taking multiple steps in a loop of onesteps, to get
 # same result
 vmprev = wstar4.vm # start with regular speed
+window = 7
 vees = zeros(nsteps)
 taus = zeros(nsteps)
 for i in 1:nsteps

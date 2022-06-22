@@ -29,7 +29,7 @@ hud = demeanandnormalize(convert(Vector{Float64},udmsr.steps.vm),0.05)
 plotvees(udmsr,speedtype=:midstance,usespline=false,boundaryvels=(wstar4s.vm,wstar4s.vm),tchange=0)
 
 ## Simulate a stretch of uneven terrain
-nterrain = 100
+nterrain = 1000
 δs = rand(nterrain)./10
 coefs = hcat(0:nterrain-1,ones(nterrain))\δs # slope and offset
 δs .= δs .- hcat(0:nterrain-1,ones(nterrain))*coefs # detrend the bumps
@@ -154,7 +154,7 @@ vmprev = vstar
 vs = zeros(nterrain); Ps = zeros(nterrain); steptimes = zeros(nterrain); terror = zeros(nterrain);
 workerror = zeros(nterrain)
 for i in eachindex(δs)
-    window = max(1, i-halfwindow+1):min(length(δs),i+halfwindow-1)
+    window = max(1, i-halfwindow+1):min(length(δs),i+halfwindow-1) # surrounding i
     predictedv = conv(δs[window], newh)[nsteps-1] + wstar4s.vm
     stepresult = onestepp(wstar4s, vm=vmprev, vnext=predictedv, δangle=δs[i])
     P, tf = (stepresult.P, stepresult.tf)
@@ -163,8 +163,11 @@ for i in eachindex(δs)
     steptimes[i] = tf
     terror[i] = tf - tstar
     workerror[i] = stepresult.Pwork - workstar
-    newh .= newh .- muw*(workerror[i-1]*δs[i-halfwindow+1:i+halfwindow-1]) .-
-      mut*(terror[i-1]*δs[i-halfwindow+1:i+halfwindow-1])
+    pastwindow = max(1, i-nsteps+1):i
+    aveterror = mean(terror[pastwindow])
+    avewerror = mean(workerror[pastwindow])
+    newh .= newh .- muw*(avewerror*δs[i-halfwindow+1:i+halfwindow-1]) .-
+      mut*(aveterror*δs[i-halfwindow+1:i+halfwindow-1])
 end
 plot(newh*1000)
 plot!(h)
