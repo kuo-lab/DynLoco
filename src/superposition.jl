@@ -14,6 +14,7 @@ nsteps = 15; halfwindow = (nsteps+1) ÷ 2
 δou = zeros(nsteps); δou[Int((nsteps+1)/2)] = 0.05
 oumsr=optwalk(wstar4s, nsteps, boundarywork=false, δs=δou)
 h = demeanandnormalize(convert(Vector{Float64},oumsr.steps.vm),0.05) # normalized impulse response
+hstar = copy(h)
 plotvees(oumsr,speedtype=:midstance,usespline=false,boundaryvels=(wstar4s.vm,wstar4s.vm),tchange=0)
 
 # downstep
@@ -105,26 +106,32 @@ plot!(vchecks,linestyle=:dash)
 plot(Ps)
 plot!(nominalmsr.steps.P,linestyle=:dash)
 
-## another replication of optimum, but using convolution
-Ps = zeros(nterrain); steptimes = zeros(nterrain); vchecks = zeros(nterrain)
+## another replication of optimum, but using convolution or convolution by hand
+Ps = zeros(nterrain); steptimes = zeros(nterrain); vchecks = zeros(nterrain); vchecks2 = zeros(nterrain)
 vmprev = vstar
 for i in 8:length(δs)-7
-    predictedv = sum(reverse(δs[i-halfwindow+1:i+halfwindow-1]) .* h)
+    predictedv = sum(reverse(δs[i-halfwindow+1:i+halfwindow-1]) .* h) 
+    predictedv2 = conv(padme(δs,i-halfwindow+1,i+halfwindow-1), h)[nsteps]
     vchecks[i] = predictedv
+    vchecks2[i] = predictedv2
 end
-plot(vchecks)
-plot!(vs0)
+plot(vs0)
+plot!(vchecks)
+plot!(vchecks2)
 
 
-## Use convolution to predict the next v and P
+
+## Use convolution by hand to predict the next v and P
+# this works, but need to do padding and offset.
 Ps = zeros(nterrain); steptimes = zeros(nterrain); vchecks = zeros(nterrain); vchecks2 = zeros(nterrain)
 terror = zeros(nterrain); workerror = zeros(nterrain)
 vmprev = vstar
 δpad = vcat(zeros(halfwindow-1), δs, zeros(halfwindow-1))
-newh = h#(rand(nsteps) .- 0.5)*0.25#h.*0
+newh = copy(h)#(rand(nsteps) .- 0.5)*0.25#h.*0
 muw = 0.5; mut = 0.5
 for i in 8:length(δpad)-7
     predictedv = sum(reverse(δpad[i-halfwindow+1:i+halfwindow-1]) .* h)
+    #predictedv = conv(padme(δs,i-halfwindow+1,i+halfwindow-1), h)[nsteps] # this is offset by 7, need to fix
     vchecks[i-7] = predictedv
     stepresult = onestepp(wstar4s; vm=vmprev, vnext=predictedv+vstar, δangle=δpad[i])
     P = stepresult.P # based on our current impulse response, this is the push-off to apply
@@ -146,16 +153,17 @@ plot!(nominalmsr.steps.P,linestyle=:dash)
 plot(newh)
 
 
-
+# using convolution, we're able to adapt to something
+# but it's wrong. I think the issue is we're using the past errors to 
+# correlate with the deltas, and it's a bit more complicated than that.
 matrixofcorr = zeros(nterrain,nsteps)
-newh = h.*0
-muw = 0.01; mut = 0.01
+newh = h*0.0 # start with constant steps, which should yield 
+muw = 0.5; mut = 0.002
 vmprev = vstar
 vs = zeros(nterrain); Ps = zeros(nterrain); steptimes = zeros(nterrain); terror = zeros(nterrain);
 workerror = zeros(nterrain)
 for i in eachindex(δs)
-    window = max(1, i-halfwindow+1):min(length(δs),i+halfwindow-1) # surrounding i
-    predictedv = conv(δs[window], newh)[nsteps-1] + wstar4s.vm
+    predictedv = conv(padme(δs,i-halfwindow+1,i+halfwindow-1), newh)[nsteps] + vstar
     stepresult = onestepp(wstar4s, vm=vmprev, vnext=predictedv, δangle=δs[i])
     P, tf = (stepresult.P, stepresult.tf)
     vs[i] = predictedv
@@ -166,10 +174,14 @@ for i in eachindex(δs)
     pastwindow = max(1, i-nsteps+1):i
     aveterror = mean(terror[pastwindow])
     avewerror = mean(workerror[pastwindow])
-    newh .= newh .- muw*(avewerror*δs[i-halfwindow+1:i+halfwindow-1]) .-
-      mut*(aveterror*δs[i-halfwindow+1:i+halfwindow-1])
+    newh .= newh .- muw*(avewerror*reverse(padme(δs,i-nsteps+1,i))) .-
+      mut*(aveterror*reverse(padme(δs,i-nsteps+1,i)))
 end
-plot(newh*1000)
+plot(newh)
+plot(vs0)
+plot!(vs.-vstar)
+plot!(vchecks, linestyle=:dash)
+
 plot!(h)
 
 ## Now do the same thing, except take a walk using the h0
@@ -194,6 +206,64 @@ for i in 1:nterrain
     movingaveragev[i] = mean(vees[i-window:i])
     movingaveraget[i] = mean(taus[i-window:i])
 end
+
+
+## Verify that taking bad steps is bad
+newh = copy(h) # the correct response
+muw = 0.01; mut = 0.01
+vmprev = vstar
+vs = zeros(nterrain); Ps = zeros(nterrain); steptimes = zeros(nterrain); terror = zeros(nterrain);
+workerror = zeros(nterrain)
+for i in eachindex(δs)
+    predictedv = conv(padme(δs,i-halfwindow+1,i+halfwindow-1),newh)[nsteps] + vstar
+    stepresult = onestepp(wstar4s, vm=vmprev, vnext=predictedv, δangle=δs[i])
+    P, tf = (stepresult.P, stepresult.tf)
+    vs[i] = predictedv
+    Ps[i] = P
+    steptimes[i] = tf
+    terror[i] = tf - tstar
+    workerror[i] = stepresult.Pwork - workstar
+    pastwindow = max(1, i-nsteps+1):i
+    aveterror = mean(terror[pastwindow])
+    avewerror = mean(workerror[pastwindow])
+    vmprev = stepresult.vm
+    #newh .= newh .- muw*(avewerror*padme(δs,i-halfwindow+1,i+halfwindow-1) .-
+    #  mut*(aveterror*padme(δs,i-halfwindow+1,i+halfwindow-1)
+end
+badh = circshift(h, 7)*0 # incorrect response
+badvs = zeros(nterrain); badPs = zeros(nterrain); badsteptimes = zeros(nterrain); badterror = zeros(nterrain);
+badworkerror = zeros(nterrain)
+for i in eachindex(δs)
+    predictedv = conv(padme(δs,i-halfwindow+1,i+halfwindow-1), badh)[nsteps] + vstar
+    stepresult = onestepp(wstar4s, vm=vmprev, vnext=predictedv, δangle=δs[i])
+    P, tf = (stepresult.P, stepresult.tf)
+    badvs[i] = predictedv
+    badPs[i] = P
+    badsteptimes[i] = tf
+    badterror[i] = tf - tstar
+    badworkerror[i] = stepresult.Pwork - workstar
+    pastwindow = max(1, i-nsteps+1):i
+    aveterror = mean(badterror[pastwindow])
+    avewerror = mean(badworkerror[pastwindow])
+    vmprev = stepresult.vm
+    #newh .= newh .- muw*(avewerror*padme(δs,i-halfwindow+1,i+halfwindow-1) .-
+    #  mut*(aveterror*padme(δs,i-halfwindow+1,i+halfwindow-1)
+end
+plot(terror)
+plot!(badterror)
+
+plot(workerror)
+plot!(badworkerror)
+
+
+
+
+
+
+
+
+
+
 
 ## 
 newh = h * 0
