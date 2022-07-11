@@ -29,7 +29,7 @@ udmsr=optwalk(wstar4s, nsteps, boundarywork=false, δs=δud)
 hud = demeanandnormalize(convert(Vector{Float64},udmsr.steps.vm),0.05)
 plotvees(udmsr,speedtype=:midstance,usespline=false,boundaryvels=(wstar4s.vm,wstar4s.vm),tchange=0)
 
-## Simulate a stretch of uneven terrain
+## Optimize/simulate a stretch of uneven terrain
 nterrain = 1000
 δs = rand(nterrain)./10
 coefs = hcat(0:nterrain-1,ones(nterrain))\δs # slope and offset
@@ -60,6 +60,13 @@ plot!(vs0, label="demeaned v*") # so linearly predicted v resembles computed opt
 plot(h,label="optimal up",title="Optimal h and regressed h")
 plot!(A[halfwindow:end,1:2*halfwindow-1] \ vs0[1:end-halfwindow+1],label="pinv response")
 
+# should also be possible to do h*δs with convolution & toeplitz matrix
+Ah = TriangularToeplitz([h;zeros(nterrain-nsteps)], :L) # 15x15
+pvh = Ah*δs
+pvc = conv(h, δs) # predicted speeds through h convolution
+plot(pvh[halfwindow:end],label="predicted v toep")
+plot!(pvc[halfwindow:end],label="predicted v conv")
+plot!(vs0, label="demeaned v*")
 
 
 ## Take a moving average of speeds
@@ -67,6 +74,15 @@ movingavekernel = ones(nsteps)./nsteps
 movingavev = conv(movingavekernel, vs0)[halfwindow+0:end+1-halfwindow] # moving average speed error
 plot(movingavev, title="moving average speed")
 plot!(vs0)
+# take a moving average of push-off work
+movingavekernel = ones(nsteps)./nsteps
+movingwork = conv(movingavekernel,nominalmsr.steps.Pwork)
+movingP = conv(movingavekernel,nominalmsr.steps,P)
+movingtime2 = 0.5 .*conv(movingavekernel,nominalmsr.steps.tf - tstar).^2
+movingtime = conv(movingavekernel,nominalmsr.steps.tf - tstar) 
+finalv2 = 0.5 .*(conv([zeros(nsteps-1); 1], nominalmsr.steps.vm) .- vstar).^2 # should be zero
+finalv = conv([zeros(nsteps-1); 1], nominalmsr.steps.vm) .- vstar # should be zero
+
 
 ## How well correlated is the moving average with the bumps?
 plot(movingavev .* circshift(δs,20))
@@ -92,7 +108,7 @@ plot!(h)
 ## now take some steps, replicating the optimum
 Ps = zeros(nterrain); steptimes = zeros(nterrain); vchecks = zeros(nterrain)
 vmprev = vstar
-for i in eachindex(δs)
+for i in eachindex(δs) # vs[i-1], vs[i] -> Ps[i], steptimes[i], vchecks[i]
     predictedv = vs[i]
     stepresult = onestepp(wstar4s; vm=vmprev, vnext=predictedv, δangle=δs[i])
     Ps[i] = stepresult.P
@@ -560,5 +576,18 @@ end
 
 
 padme([1,2,3],1,3)
+
+
+using ForwardDiff
+f = v->onestepp(wstar4s; vm=0.4, vnext=v, δangle = -0.02)
+g = v->getfield.(Ref(f(v)),[:tf,:P])
+ForwardDiff.derivative(g,0.37)
+
+f = getfield.(Ref(v->onestepp(wstar4s; vm=0.4, vnext=v, δangle = -0.02)),(:tf,:P))
+
+crap = onestepp(wstar4s, vm = 0.4, vnext=0.37, δangle=-0.02)
+getfield.(Ref(crap), (:P,:tf))
+
+getfield(crap)
 
 
