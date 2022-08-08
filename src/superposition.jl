@@ -209,13 +209,15 @@ end
 
 
 ## Verify that taking bad steps is bad
-newh = copy(h) # the correct response
-muw = 0.01; mut = 0.01
+badh = copy(h); #badh[6:7] .= 0.5
+newh = 0*copy(h) # the correct response
+muw = 0.1; mut = 0.1; muv = 0.02;
 vmprev = vstar
 vs = zeros(nterrain); Ps = zeros(nterrain); steptimes = zeros(nterrain); terror = zeros(nterrain);
 workerror = zeros(nterrain)
 for i in eachindex(δs)
-    predictedv = conv(padme(δs,i-halfwindow+1,i+halfwindow-1),newh)[nsteps] + vstar
+    predictedv = sum(reverse(padme(δs,i-halfwindow+1,i+halfwindow-1)) .* badh) + vstar
+    #predictedv = conv(padme(δs,i-halfwindow+1,i+halfwindow-1),badh)[nsteps] + vstar
     stepresult = onestepp(wstar4s, vm=vmprev, vnext=predictedv, δangle=δs[i])
     P, tf = (stepresult.P, stepresult.tf)
     vs[i] = predictedv
@@ -226,10 +228,21 @@ for i in eachindex(δs)
     pastwindow = max(1, i-nsteps+1):i
     aveterror = mean(terror[pastwindow])
     avewerror = mean(workerror[pastwindow])
+    venderror = vs[i] - vstar
     vmprev = stepresult.vm
-    #newh .= newh .- muw*(avewerror*padme(δs,i-halfwindow+1,i+halfwindow-1) .-
-    #  mut*(aveterror*padme(δs,i-halfwindow+1,i+halfwindow-1)
+    newh .= newh .- muw*(avewerror*reverse(padme(δs,i-nsteps+1,i))) .-
+      mut*aveterror*reverse(padme(δs,i-nsteps+1,i)) .-
+      muv*venderror*reverse(padme(δs,i-nsteps+1,i))
+    # newh .= newh .- muw*(avewerror*reverse(padme(δs,i-halfwindow+1,i+halfwindow-1))) .-
+    #   mut*aveterror*reverse(padme(δs,i-halfwindow+1,i+halfwindow-1)) .-
+    #   muv*venderror*reverse(padme(δs,i-halfwindow+1,i+halfwindow-1))
 end
+plot(newh)
+@show mean(workerror), mean(terror)
+# nominal  (0.0003767424800203128, 0.00533417779525546)
+(0.0003767424800203128, 0.00533417779525546)(mean(workerror), mean(terror)) = (0.0003767424800203128, 0.00533417779525546)
+(0.0003767424800203128, 0.00533417779525546)
+
 badh = circshift(h, 7)*0 # incorrect response
 badvs = zeros(nterrain); badPs = zeros(nterrain); badsteptimes = zeros(nterrain); badterror = zeros(nterrain);
 badworkerror = zeros(nterrain)
@@ -246,8 +259,8 @@ for i in eachindex(δs)
     aveterror = mean(badterror[pastwindow])
     avewerror = mean(badworkerror[pastwindow])
     vmprev = stepresult.vm
-    #newh .= newh .- muw*(avewerror*padme(δs,i-halfwindow+1,i+halfwindow-1) .-
-    #  mut*(aveterror*padme(δs,i-halfwindow+1,i+halfwindow-1)
+    newh .= newh .- muw*(avewerror*padme(δs,i-halfwindow+1,i+halfwindow-1) .-
+      0*mut*(aveterror*padme(δs,i-halfwindow+1,i+halfwindow-1)
 end
 plot(terror)
 plot!(badterror)
