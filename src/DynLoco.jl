@@ -201,8 +201,49 @@ function onestep(w::WalkRW2l; vm=w.vm, P=w.P, δangle = 0.,
         Ωminus=Ωminus,Ωplus=Ωplus,
         vm0=vm,δ=δangle)
 end
+export simulatestep
 
+"""
+    simulate(walk [,parameters, safety])
 
+Simulate one step with a `walk` struct, from mid-stance to mid-stance,
+and return the continuous-time time t plus states θ and Ω. Continuous-
+time states are useful for plotting. Here they include a doubled time
+point for the step-to-step transition, for the states immediately before and
+after.
+
+Parameter values can be supplied to override the existing field values. 
+Notably, includes vm, P, δangle.
+Output is arrays (t, θ, Ω).
+See `onestep` to get just the discrete mid-stance states
+"""
+function simulatestep(w::WalkRW2l; options...)
+    # find end conditions of a step, destructure into local variables
+    (; vm0,θnew,tf,tf1,tf2,Ωplus) = onestep(w; options...)
+    (; g, L, γ) = w;
+    n = 100
+    n1 = Int(floor((n+1)/2)) # allocate time steps before & after s2s transition
+    n2 = n - n1            
+    t1 = LinRange(0, tf1, n1)  # time goes from 0 to tf1 (just before s2s transition)
+    t2 = LinRange(0, tf2, n2) #  then from 0 (just after s2s transition) to tf2
+    # where we treat each phase as starting at t=0. For plotting we will assemble
+    # a single time vector for both phases
+    t = [t1; t2 .+ tf1]
+    ωₙ = g / L  
+    #show(typeof(t1))
+    #show(typeof(tf1))
+    #show( exp.(ωₙ .*t1) )
+    etw = exp.(ωₙ*t1); emtw = 1 ./ etw # char roots of linearized inverted pendulum are ±ωₙ
+    # Leg angle vs. time, first part of stance
+    θ1 = @. -(emtw*(etw-1)*((etw+1)*vm0)+(etw-1)*L*γ*ωₙ)/(2*L*ωₙ) 
+    # second part of stance
+    etw = exp.(ωₙ*t2); emtw = 1 ./ etw # char roots of linearized inverted pendulum are ±ωₙ
+    θ2 = @. emtw *((etw*etw-1)*Ωplus + (-(etw-1)^2*γ + (etw*etw+1)*θnew)*ωₙ)/(2*ωₙ) 
+    Ω1 = @. -(emtw*(etw*etw+1)*vm0+(etw*etw-1)*L*γ*ωₙ)/(2*L)
+    Ω2 = @. 0.5*emtw*((etw*etw+1)*Ωplus - (etw*etw-1)*(γ-θnew)*ωₙ)
+
+    return (t, [θ1; θ2], [Ω1; Ω2])
+end
 
 """
     wnew = findgait(walk [,target=target] [,varying=varying] [,parameters])
@@ -542,7 +583,7 @@ end # logshave
 export plotvees, plotvees!
 
 """
-    plotvees(results::MultiStepResults [, tchange = 3, boundaryvels = (0.,0.))
+    plotvees(results::MultiStepResults [, tchange = 1, boundaryvels = (0.,0.))
 
 Plots a series of discrete speeds for multiple steps, along with a spline
 to connect the discrete points. Returns a `Plot` struct. See also plotvees!(p, ...).
@@ -632,7 +673,7 @@ function optwalktime(w::W, nsteps=5; boundaryvels::Union{Tuple,Nothing} = (0.,0.
     ctime = 0.05, tchange = 3., boundarywork = true, δs = zeros(nsteps), startv = w.vm, negworkcost = 0., walkparms...) where W <: Walk
     #println("walkparms = ", walkparms)
     w = W(w; walkparms...)
-    optsteps = Model(optimizer_with_attributes(Ipopt.Optimizer, "print_level"=>1))
+    optsteps = Model(optimizer_with_attributes(Ipopt.Optimizer, "print_level"=>0))
     @variable(optsteps, P[1:nsteps]>=0, start=w.P) # JuMP variables P
     # constraints: starting guess for velocities
     if length(startv) == 1 # startv can be just a scalar, a 1-element vector, or n elements
@@ -846,6 +887,23 @@ function optwalkvar(w::W, numsteps=5; boundaryvels::Union{Tuple,Nothing} = nothi
     return multistep(W(w,vm=value(v[1])), value.(P), δs, vm0=value(v[1]), boundaryvels=boundaryvels) #, optimal_solution
 end
 
+"""
+    stepspeeds(steps)  returns per-step speeds given `step` data
+
+Speed is defined as distance/time between mid-stance instances. Also called "body speed" in 
+manuscripts. Input `steps` should be struct containing `steplength` and `tf` arrays for the
+individual steps, usually a field of `MultiStepResults` structs. The last step time is padded 
+with optional `tchange=1.75` which is the boundary condition time, to bring the body to rest.
+"""
+function stepspeeds(steps; tchange=1.75) # these are step speeds as used in :shortwalks
+    steptimes = [steps.tf; tchange] # which are discrete per-step averages equivalent
+    stepdistances = [steps.steplength; 0] # to the "body speed" used in manuscript
+    return cumsum([0;steptimes],dims=1), [0; stepdistances./steptimes]
+end
+
+
 include("optwalktriangle.jl") #
+
+
 
 end # Module
