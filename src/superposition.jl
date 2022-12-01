@@ -337,7 +337,7 @@ plot!(conv(padme(δs,i-halfwin,i+halfwin),h)[1+halfwin:end-halfwin])
 
 ## take a bunch of single steps (simulation works)
 vees = zeros(nterrain); vcheck2 = zeros(nterrain); Ps = zeros(nterrain); taus = zeros(nterrain)
-movingtau = zeros(nterrain); movingwork = zeros(nterrain); workcorr = zeros(nterrain,nsteps); taucorr = zeros(nterrain,nsteps)
+vmprev = vstar; movingtau = zeros(nterrain); movingwork = zeros(nterrain); workcorr = zeros(nterrain,nsteps); taucorr = zeros(nterrain,nsteps)
 for i in 1:nterrain
     predictedv = sum(reverse(padme(δs,i-halfwindow+1,i+halfwindow-1)) .* h)
     osr = onestepp(wstar4s, vm=vmprev, vnext=predictedv+vstar, δangle=δs[i]) 

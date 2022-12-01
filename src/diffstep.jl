@@ -30,7 +30,7 @@ plotvees(oumsr,speedtype=:midstance,usespline=false,boundaryvels=(wstar4s.vm,wst
 
 onestep(wstar4s, P = wstar4s.P*1.05)
 onestepp(wstar4s)
-oofstep(P, )
+#oofstep(P, )
 
 onestepp(wstar4s, vm = wstar4s.vm, vnext = 0.4, δangle = 0.).P
 using ForwardDiff
@@ -56,6 +56,77 @@ dworkdtheta = P * dPdv .* dvdtheta # a gradient with respect to parameters
 tf = onestepp(wstar4s, δangle = 0.).tf
 dtfdv = ForwardDiff.derivative( v->onestepp(wstar4s, vnext=v).tf, wstar4s.vm) # -1.727319
 dtimedtheta = (tf-tstar) * dtfdv .* dvdtheta
+
+
+
+# I'm trying to compute the derivative by chain rule
+vees = zeros(nterrain); vcheck2 = zeros(nterrain); Ps = zeros(nterrain); taus = zeros(nterrain)
+vmprev = vstar; movingtau = zeros(nterrain); movingwork = zeros(nterrain); workcorr = zeros(nterrain,nsteps); taucorr = zeros(nterrain,nsteps)
+dworkdtheta = zeros(nsteps); dtimedtheta = zeros(nsteps)
+for i in (1:nsteps).+8
+    predictedv = sum(reverse(padme(δs,i-halfwindow+1,i+halfwindow-1)) .* h)
+#    predictedv = sum(reverse(h) .* padme(δs,i-halfwindow+1,i+halfwindow-1))
+    osr = onestepp(wstar4s, vm=vmprev, vnext=predictedv+vstar, δangle=δs[i]) 
+    osr2 = onestep(wstar4s, vm=vmprev, P=osr.P, δangle=δs[i])
+    vees[i] = predictedv
+    Ps[i] = osr.P
+    taus[i] = osr.tf
+    vmprev = predictedv + vstar
+    vcheck2[i] = osr2.vm
+    dPdv = ForwardDiff.derivative( v-> onestepp(wstar4s, vm=vmprev, vnext=v, δangle=δs[i]).P, predictedv+vstar)
+    dtfdv = ForwardDiff.derivative( v-> onestepp(wstar4s, vm=vmprev, vnext=v, δangle=δs[i]).tf, predictedv+vstar)
+    dvdtheta = reverse(padme(δs,i-halfwindow+1,i+halfwindow-1))
+    dworkdtheta .+= osr.P * dPdv .* dvdtheta
+    dtimedtheta .+= (osr.tf-tstar) * dtfdv .* dvdtheta
+
+    movingtau[i] = 1/nsteps*sum(padme(taus,i-nsteps+1,i)) - tstar
+    movingwork[i] = 1/nsteps*sum(abs2,0.5*padme(Ps,i-2+1,i)) - 0.5*Pstar^2
+    if i >= nsteps 
+        workcorr[i,:] = movingwork[i] * padme(δs,i-nsteps+1,i) # should complain about high work
+        taucorr[i,:] = movingtau[i] * padme(δs, i-nsteps+1,i)
+    end
+end
+plot(vs0); plot!(vees); plot!(vcheck2.-vstar) # good
+
+
+# Meanwhile try to compute derivative by making a function
+# that computes work and time for the terrain
+function takesteps(w::WalkRW2l;δs=δs, h=hstar)
+# return the work and time for taking a bunch of steps on terrain
+# using policy h    
+vees = zeros(nterrain); vcheck2 = zeros(nterrain); Ps = zeros(nterrain); taus = zeros(nterrain)
+vmprev = vstar; movingtau = zeros(nterrain); movingwork = zeros(nterrain); workcorr = zeros(nterrain,nsteps); taucorr = zeros(nterrain,nsteps)
+dworkdtheta = zeros(nsteps); dtimedtheta = zeros(nsteps)
+for i in (1:nsteps).+8
+    predictedv = sum(reverse(padme(δs,i-halfwindow+1,i+halfwindow-1)) .* h)
+#    predictedv = sum(reverse(h) .* padme(δs,i-halfwindow+1,i+halfwindow-1))
+    osr = onestepp(wstar4s, vm=vmprev, vnext=predictedv+vstar, δangle=δs[i]) 
+    osr2 = onestep(wstar4s, vm=vmprev, P=osr.P, δangle=δs[i])
+    vees[i] = predictedv
+    Ps[i] = osr.P
+    taus[i] = osr.tf
+    vmprev = predictedv + vstar
+    vcheck2[i] = osr2.vm
+    dPdv = ForwardDiff.derivative( v-> onestepp(wstar4s, vm=vmprev, vnext=v, δangle=δs[i]).P, predictedv+vstar)
+    dtfdv = ForwardDiff.derivative( v-> onestepp(wstar4s, vm=vmprev, vnext=v, δangle=δs[i]).tf, predictedv+vstar)
+    dvdtheta = reverse(padme(δs,i-halfwindow+1,i+halfwindow-1))
+    dworkdtheta .+= osr.P * dPdv .* dvdtheta
+    dtimedtheta .+= (osr.tf-tstar) * dtfdv .* dvdtheta
+
+    movingtau[i] = 1/nsteps*sum(padme(taus,i-nsteps+1,i)) - tstar
+    movingwork[i] = 1/nsteps*sum(abs2,0.5*padme(Ps,i-2+1,i)) - 0.5*Pstar^2
+    if i >= nsteps 
+        workcorr[i,:] = movingwork[i] * padme(δs,i-nsteps+1,i) # should complain about high work
+        taucorr[i,:] = movingtau[i] * padme(δs, i-nsteps+1,i)
+    end
+end
+plot(vs0); plot!(vees); plot!(vcheck2.-vstar) # good
+
+
+
+
+
+
 
 
 
