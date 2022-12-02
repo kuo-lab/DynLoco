@@ -3,12 +3,6 @@ using Plots, Statistics
 plotlyjs() # Use this backend to preserve fonts on export to SVG or PDF
 default(grid=false, fontfamily="Helvetica") # no grid on plots
 
-function stepspeeds(steps) # these are step speeds as used in :shortwalks
-    steptimes = [steps.tf; tchange]
-    stepdistances = [steps.steplength; 0]
-    return cumsum([0;steptimes],dims=1), [0; stepdistances./steptimes]
-end
-
 ## Short walks of different distances
 # Take walks of varying distances, and show how the optimal trajectory is to have a bell-shaped
 # velocity profile, with peak speed that increases with distance up to about 12 steps.
@@ -180,21 +174,21 @@ for (j, ctime) in enumerate(ctimes)
             vscale = vbase/peaks[end,j],subplot=1) # main scaled speed vs time
     end
 end
-for (i,result) in enumerate(resultvss) # add in the variable step length results computed above in resultvss
+for (i,result) in enumerate(resultvss) # add in the variable step length results computed above in resultvss (dash-dot lines)
     plotvees!(pleft,result, tchange=tchange, usespline=false, speedtype=:shortwalks, color=i, markersize=2, linestyle=:dashdot,subplot=1,
     tscale = tbase/(durationvss[end]),vscale = vbase/peakspdvss[end]) # plot instantaneous speed vs. time
     plotvees!(ptop,result, tchange=tchange, color=i, usespline=:false, speedtype=:shortwalks,markersize=0, 
         xticks = [20,40], yticks=[0.2,0.4,0.6],subplot=2,xguide="",yguide="",tickfontsize=4,
         xlims=(0,maximum(durations)+3tchange), ylims=(0,maximum(peaks)), linewidth=0.5)
 end
-for (i,result) in enumerate(results43) # add in shorter steps
+for (i,result) in enumerate(results43) # add in shorter steps (dashed lines)
     plotvees!(pleft,result, tchange=tchange, color=i, usespline=:false, speedtype=:shortwalks,markersize=2, tscale = tbase/(durations43[end]), 
         vscale = vbase/peakspds43[end],subplot=1, linestyle=:dash)
     plotvees!(ptop,result, tchange=tchange, color=i, usespline=:false, speedtype=:shortwalks,markersize=0, 
         xticks = [20,40], yticks=[0.2,0.4,0.6],subplot=1,xguide="",yguide="",tickfontsize=4,
         xlims=(0,maximum(durations)+3tchange), ylims=(0,maximum(peaks)), linewidth=0.5)
 end
-for (i,result) in enumerate(results44) # add in longer steps
+for (i,result) in enumerate(results44) # add in longer steps (dotted lines)
     plotvees!(pleft,result, tchange=tchange, color=i, usespline=:false, speedtype=:shortwalks,markersize=2, tscale = tbase/(durations44[end]), 
         vscale = vbase/peakspds44[end],subplot=1, linestyle=:dot)
     plotvees!(ptop,result, tchange=tchange, color=i, usespline=:false, speedtype=:shortwalks,markersize=0,  
@@ -830,3 +824,7 @@ println("triangle   = ", 1/2*mintrimsr.vm0^2 + sum(mintrimsr.steps.Pwork))
 println("ratio = ",  (1/2*minvarmsr.vm0^2 + sum(minvarmsr.steps.Pwork))/(1/2*nominalmsr.vm0^2 + sum(nominalmsr.steps.Pwork)) )
 println("ratio = ",  (1/2*mintrimsr.vm0^2 + sum(mintrimsr.steps.Pwork))/(1/2*nominalmsr.vm0^2 + sum(nominalmsr.steps.Pwork)) )
 #println("ratio = ",  (sum(minvarmsr.steps.Pwork))/(sum(nominalmsr.steps.Pwork)) )
+
+threecosts = [1/2*nominalmsr.vm0^2 + sum(nominalmsr.steps.Pwork), 1/2*minvarmsr.vm0^2 + sum(minvarmsr.steps.Pwork), 1/2*mintrimsr.vm0^2 + sum(mintrimsr.steps.Pwork)]
+bar(threecosts,xticks=((1,2,3),("Energy-Time", "Steady min-COT", "Steady accel")))
+savefig("threebars.pdf")
