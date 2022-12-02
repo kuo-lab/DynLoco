@@ -29,12 +29,12 @@ using Test
 
     # optwalkslope finds an optimal terrain, and optwalk just finds optimal push-offs.
     # Plug one into the other, they should yield the same push-offs and work
-    sloperesult = optwalkslope(wstar, 6, boundaryvels = (0., 0.), boundarywork= true, symmetric = true)
+    sloperesult = optwalkslope(wstar, 6, boundaryvels = (0., 0.), boundarywork= true, symmetric = false)
     checkresult = optwalk(wstar, 6, boundaryvels=(0.,0.), totaltime=sloperesult.totaltime,
-        δ=sloperesult.δangles)
+        δs=sloperesult.δangles)
     @test sloperesult.totaltime ≈ onestep(wstar).tf*6 # defaults to N steps of steady walking
     @test checkresult.totaltime ≈ sloperesult.totaltime # walk time should be equal
-    @test sloperesult.steps.P ≈ checkresult.steps.P # push-offs should be equal
+    @test isapprox(sloperesult.steps.P, checkresult.steps.P, atol=10*sqrt(eps(sloperesult.steps.P[1]))) # push-offs should be approx equal, with a slightly relaxed tolerance
     @test sloperesult.steps.vm0 ≈ checkresult.steps.vm0 # mid-stance velocities should be equal
     msr = multistep(wstar, sloperesult.steps.P, sloperesult.steps.δ, boundaryvels=(0.,0.))
     @test msr.steps.Pwork ≈ sloperesult.steps.Pwork
