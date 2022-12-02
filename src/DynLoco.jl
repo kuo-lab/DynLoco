@@ -280,7 +280,7 @@ function findgait(w::W, target::Tuple{Vararg{Pair}}, varying::Tuple) where W <: 
     varying = (varying..., w.limitcycle.parms...)   # we always add vm as a limit cycle variable
     target = (target..., # and a target, where 0 is dummy
         map(Pair,w.limitcycle.parms,zeros(length(w.limitcycle.parms)))...)
-    model = Model(optimizer_with_attributes(Ipopt.Optimizer, "print_level"=>0))
+    model = Model(optimizer_with_attributes(Ipopt.Optimizer, "print_level"=>0, "sb"=>"yes")) # sb=suppress banner Ipopt)
     nvars = length(varying)
     @assert nvars == length(target) "number of target should equal number of varying"
     startvalues = getfields(w, varying)  # initial guess taken from Walk parameters
@@ -455,7 +455,7 @@ function optwalk(w::W, numsteps=5; boundaryvels::Union{Tuple,Nothing} = nothing,
     boundarywork::Union{Tuple{Bool,Bool},Bool} = (true,true), totaltime=numsteps*onestep(w).tf,
     δs = zeros(numsteps)) where W <: Walk # default to taking the time of regular steady walking
 
-    optsteps = Model(optimizer_with_attributes(Ipopt.Optimizer, "print_level"=>0))
+    optsteps = Model(optimizer_with_attributes(Ipopt.Optimizer, "print_level"=>0, "sb"=>"yes")) # sb=suppress banner Ipopt)
     @variable(optsteps, P[1:numsteps]>=0, start=w.P) # JuMP variables P
     @variable(optsteps, v[1:numsteps+1]>=0, start=w.vm) # mid-stance speeds
 
@@ -520,7 +520,7 @@ See also `optwalk`
 function optwalkslope(w::W, numsteps=5; boundaryvels::Union{Tuple,Nothing} = nothing,
     boundarywork = true, symmetric=false,
     totaltime=numsteps*onestep(w).tf) where W <: Walk # default to taking the time of regular steady walking
-    optsteps = Model(optimizer_with_attributes(Ipopt.Optimizer, "print_level"=>0))
+    optsteps = Model(optimizer_with_attributes(Ipopt.Optimizer, "print_level"=>0, "sb"=>"yes")) # sb=suppress banner Ipopt
     @variable(optsteps, P[1:numsteps]>=0, start=w.P) # JuMP variables P
     @variable(optsteps, δ[1:numsteps], start=0.)         # delta slope
     @constraint(optsteps, sum(δ[i] for i =1:numsteps) == 0.)  # zero height gain
@@ -673,7 +673,7 @@ function optwalktime(w::W, nsteps=5; boundaryvels::Union{Tuple,Nothing} = (0.,0.
     ctime = 0.05, tchange = 3., boundarywork = true, δs = zeros(nsteps), startv = w.vm, negworkcost = 0., walkparms...) where W <: Walk
     #println("walkparms = ", walkparms)
     w = W(w; walkparms...)
-    optsteps = Model(optimizer_with_attributes(Ipopt.Optimizer, "print_level"=>0))
+    optsteps = Model(optimizer_with_attributes(Ipopt.Optimizer, "print_level"=>0, "sb"=>"yes")) # sb=suppress banner Ipopt
     @variable(optsteps, P[1:nsteps]>=0, start=w.P) # JuMP variables P
     # constraints: starting guess for velocities
     if length(startv) == 1 # startv can be just a scalar, a 1-element vector, or n elements
@@ -735,7 +735,7 @@ end
 #     boundarywork = true,
 #     δ = zeros(numsteps))
 #
-#     optsteps = Model(optimizer_with_attributes(Ipopt.Optimizer, "print_level"=>0))
+#     optsteps = Model(optimizer_with_attributes(Ipopt.Optimizer, "print_level"=>0, "sb"=>"yes")) # sb=suppress banner Ipopt
 #     @variable(optsteps, P[1:numsteps]>=0, start=w.P) # JuMP variables P
 #
 #     if boundaryvels == nothing || isempty(boundaryvels)
@@ -838,7 +838,7 @@ function optwalkvar(w::W, numsteps=5; boundaryvels::Union{Tuple,Nothing} = nothi
     boundarywork::Union{Tuple{Bool,Bool},Bool} = (true,true), totaltime=numsteps*onestep(w).tf,
     δs = zeros(numsteps)) where W <: Walk # default to taking the time of regular steady walking
 
-    optsteps = Model(optimizer_with_attributes(Ipopt.Optimizer, "print_level"=>0))
+    optsteps = Model(optimizer_with_attributes(Ipopt.Optimizer, "print_level"=>0, "sb"=>"yes")) # sb=suppress banner Ipopt
     @variable(optsteps, P[1:numsteps]>=0, start=w.P) # JuMP variables P
     @variable(optsteps, v[1:numsteps+1]>=0, start=w.vm) # mid-stance speeds
 
