@@ -9,7 +9,7 @@ default(grid=false, fontfamily="Helvetica") # no grid on plots
 # The cost function is total work, plus a linear cost of time with coefficient ctime.
 wstar4 = findgait(WalkRW2l(α=0.35,safety=true), target=:speed=>0.3, varying=:P)
 ctime = 0.015 # cost of time, to encourage hurrying
-tchange = 1.75
+tchange = 1.75 # boundary condition time to get up to speed (arbitrary, excluded from optimization) 
 p = plot()
 walksteps = [1, 2, 3, 4, 5, 6, 7, 10, 15, 20] # take walks of this # of steps
 results = Array{MultiStepResults,1}(undef,0) # store each optimization result here
@@ -504,7 +504,7 @@ trapezoidresults=multistep(WalkRW2l(w,vm=vels[1]), Ps=optimal_solution, boundary
 
 # verify with multistep
 multistepplot(trapezoidresults,plotwork=true, label="square")
-savefig("trapezoidshortwalks.svg")
+#savefig("trapezoidshortwalks.svg")
 
 # If you just want to do square wave in speed, it costs a lot of initial push-off
 # so let's compare with walking the same number of steps and same amount of time
@@ -512,7 +512,7 @@ optresults=optwalk(w, Ncruise, boundaryvels=(0,0),totaltime=trapezoidresults.tot
 println("trapezoid cost = ", trapezoidresults.totalcost, "   optimal cost = ", optresults.totalcost)
 # It's definitely more expensive to use the square wave
 multistepplot!(optresults,plotwork=true,label="optimal")
-savefig("trapezoidcomparisonshortwalks.svg")
+#savefig("trapezoidcomparisonshortwalks.svg")
 
 # nice speed profile comparison
 plotvees(trapezoidresults, tchange=1, rampuporder=1)

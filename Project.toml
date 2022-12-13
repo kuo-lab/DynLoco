@@ -5,6 +5,8 @@ version = "0.1.1"
 
 [deps]
 Dierckx = "39dd38d3-220a-591b-8e3c-4c3a8c710a94"
+Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
+Example = "7876af07-990d-54b4-ab0e-23690620f79a"
 FFTW = "7a1cc6ca-52ef-59f5-83cd-3a7055c09341"
 ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
 GR = "28b8d3ca-fb5f-59d9-8090-bfdbd6d07a71"

@@ -27,11 +27,13 @@ keyword arguments. State: mid-stance speed `vm`. Control: Push-off impulse `P`.
 `limitcycle` is a named tuple with f, a function whose root is a fixed point.
 `safety` (logical) prevents model from falling backwards, rather it always moves forward,
 albeit very slowly if given insufficient forward speed.
+
+The default object is a limit cycle with speed of 0.4.
 """
 @with_kw struct WalkRW2l <: AbstractWalkRW2
-    vm = 0.35 # initial mid-stance velocity (stance leg upright)
-    P = 0.1   # push-off impulse (mass-normalized, units of Δv)
-    α = 0.3 # angle between legs
+    vm = 0.36311831317383164 # initial mid-stance velocity (stance leg upright)
+    P = 0.1836457852912501   # push-off impulse (mass-normalized, units of Δv)
+    α = 0.35 # angle between legs
     γ = 0.  # downward slope
     L = 1.  # leg length
     M = 1.  # body mass
@@ -621,8 +623,6 @@ function plotvees!(p::Union{Plots.Plot,Plots.Subplot}, msr::MultiStepResults; tc
     vend = msr.vm0*(1 .- t0/tchange).^rampuporder # ramp-down in speed
     if usespline     # make a smooth spline from discrete velocities
         k = rampuporder # spline order
-        println("times " ,times)
-        println("v = ", v)
         if length(v) > 2 # enough points to make splines from v alone
             spline = Spline1D(times, v; k=k)
         else # only say 1 point, so let's pad v with the ramp-up ramp-down
@@ -642,9 +642,8 @@ function plotvees!(p::Union{Plots.Plot,Plots.Subplot}, msr::MultiStepResults; tc
         tslowdown = taccel[taccel .>= 0.5*twhole[end]]
         println(tspeedup[end]-tspeedup[1], " ", taccel[end]-taccel[1], " ", tslowdown[end]-tslowdown[1])
     end
-    plot!(p, times, v, legend=:none, color=color; plotoptions...)
-    plot!(p, times, v, seriestype=:scatter, markeralpha=0.1, legend=:none, color=color, # dots for discrete velocities
-        xguide="time", yguide="speed"; plotoptions...)
+    plot!(p, times, v, legend=:none; color=color, markershape=:circle, markeralpha=0.2, 
+        xguide="time", yguide="speed", markercolor=:match, plotoptions...)
 end
 
 
@@ -720,8 +719,10 @@ export islimitcycle
 
 Checks whether `w` is a limit cycle, i.e. taking one step
 returns nearly the same gait conditions for the next step.
+Optional input parameters `rtol` and `atol` set tolerances
+for approximate equality.
 """
-islimitcycle(w::Walk) = onestep(w).vm ≈ w.vm
+islimitcycle(w::Walk; atol::Real=0, rtol::Real = atol>0 ? 0 : 10*sqrt(eps(w.vm))) = isapprox(onestep(w).vm, w.vm; atol=atol, rtol=rtol)
 
 export stepspeeds
 function stridespeeds(steps; tchange = 1)
