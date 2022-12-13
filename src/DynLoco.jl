@@ -43,7 +43,6 @@ The default object is a limit cycle with speed of 0.4.
     safety = false # safety keeps model from falling backward if not enough momentum
 end
 
-
 export StepResults, MultiStepResults
 
 """

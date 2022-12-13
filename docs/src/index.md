@@ -17,9 +17,26 @@ nsteps = multistep(w, Ps = fill(w.P, (10,1)))
 plotvees(nsteps, xlabel="step #", ylabel="speed")
 ```
 
-
-
+# Initiating a model
+A locomotion model is represented by a `DynLoco` struct that contains the model parameters. The model can then be simulated and optimized.
+```julia
+using DynLoco
+w = WalkRW2l()   # a default walking model
+islimitcycle(w)  # == true (default is a limit cycle)
+onestep(w).speed # about 0.4 dimensionless speed
+```
 ```@docs
 WalkRW2l
+onestep
+```
+# Finding gaits
+```@docs
+findgait
 ```
 
+# Optimizing a model
+```@docs
+optwalk
+optwalkslope
+optwalktime
+```
