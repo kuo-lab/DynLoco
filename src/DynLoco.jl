@@ -589,7 +589,7 @@ export plotvees, plotvees!
 
 Plots a series of discrete speeds for multiple steps, along with a spline
 to connect the discrete points. Returns a `Plot` struct. See also plotvees!(p, ...).
-Other options: usespline = true, color = :auto, rampuporder = 2, tscale = 1, vscale = 1,
+Other options: usespline = false, color = :auto, rampuporder = 2, tscale = 1, vscale = 1,
 speedtype = :stride vs :midstance (default stride speed is stride length divided by stride 
 time between footfalls; midstance explicitly includes ramp-up and -down profiles)
 """
@@ -599,7 +599,7 @@ plotvees(results::MultiStepResults; veeparms...) = plotvees!(plot(), results; ve
 plotvees!(results::MultiStepResults; veeparms...) = plotvees!(Plots.CURRENT_PLOT.nullableplot, results; veeparms...)
 
 function plotvees!(p::Union{Plots.Plot,Plots.Subplot}, msr::MultiStepResults; tchange = 3, boundaryvels = (0.,0.),
-    color = :auto, usespline=true, rampuporder = 2, tscale = 1, vscale = 1, speedtype = :step, plotoptions...)
+    color = :auto, usespline=false, rampuporder = 2, tscale = 1, vscale = 1, speedtype = :step, plotoptions...)
     if speedtype == :shortwalks # to match short walks paper
         v = [0; msr.vm0; msr.steps.steplength ./ msr.steps.tf; msr.vm0; 0]*vscale
         times = cumsum([0; tchange; tchange; msr.steps[1:end-1].tf*tscale; msr.steps[end].tf*tscale-tchange*0.3;tchange*1.3]) # where we padded by tchange
@@ -640,7 +640,6 @@ function plotvees!(p::Union{Plots.Plot,Plots.Subplot}, msr::MultiStepResults; tc
         taccel = twhole[0.1*maximum(vwhole) .<= vwhole .< 0.9*maximum(vwhole)]
         tspeedup = taccel[taccel .< 0.5*twhole[end]]
         tslowdown = taccel[taccel .>= 0.5*twhole[end]]
-        println(tspeedup[end]-tspeedup[1], " ", taccel[end]-taccel[1], " ", tslowdown[end]-tslowdown[1])
     end
     plot!(p, times, v, legend=:none; color=color, markershape=:circle, markeralpha=0.2, 
         xguide="time", yguide="speed", markercolor=:match, plotoptions...)
