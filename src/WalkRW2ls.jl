@@ -8,8 +8,8 @@ export WalkRW2ls, WalkRW2lvs
 abstract type AbstractWalkRW2vs <: AbstractWalkRW2 end
 
 @with_kw struct WalkRW2ls <: AbstractWalkRW2vs
-    vm = 0.35 # initial mid-stance velocity (stance leg upright)
-    P = 0.1   # push-off impulse (mass-normalized, units of Δv)
+    vm = 0.24972422206418757 # initial mid-stance velocity (stance leg upright)
+    P = 0.15641662809369772   # push-off impulse (mass-normalized, units of Δv)
     α = 0.3 # angle between legs
     γ = 0.  # downward slope
     L = 1.  # leg length
