@@ -121,6 +121,29 @@ end
 
 export MultiStepResults
 
+"""
+    cat(msr1::MultiStepResults1, msr2, msr3, ...; dims=1)
+
+Concatenate multiple input MultiStepResults structures along dimension 1, into a single MultiStepResults. Useful for
+chaining different simulations together into a single continuous action. 
+Only one-dimensional concatenation is supported. 
+"""
+function Base.cat(msrs::MultiStepResults...; dims=1)
+    @assert dims == 1 # 
+    steps = cat((msr.steps for msr in msrs)..., dims=1)
+    totalcost = sum(msr.totalcost for msr in msrs)
+    totaltime = sum(msr.totaltime for msr in msrs)
+    vm0 = msrs[1].vm0
+    δangles = cat((msr.δangles for msr in msrs)..., dims=1)
+    boundaryvels = (msrs[1].vm0,msrs[end].boundaryvels[2])
+    MultiStepResults(steps, totalcost, totaltime, vm0, δangles, boundaryvels)
+    #steps::StructArray{StepResults}
+    #totalcost
+    #totaltime
+    #vm0             # initial speed
+    #δangles         # angles, defined positive wrt nominal γ from preceding step
+    #boundaryvels::Tuple
+end
 
 function Base.show(io::IO, s::MultiStepResults)
     print(io, "MultiStepResults: ")
@@ -368,7 +391,7 @@ export totalwork, totaltime
 
 A Plots.jl recipe for plotting output of `multistep` as 3x1 subplots with mid-stance velocity,
 push-off impulse (or work), and terrain profile. To plot push-off work, use keyword argument
-`plotwork=true`.
+`plotwork=true`. Use `boundarywork=true` to include gait initiation.
 """
 multistepplot
 
@@ -382,7 +405,7 @@ multistepplot
     v = [msr.vm0; msr.steps.vm] # all velocities
     P = msr.steps.P
     δ = msr.δangles
-    boundaryvels = msr.boundaryvels
+    boundaryvels = collect(msr.boundaryvels) # convert to array
 
     #noslope = all(δ .== 0.)
     doslope = true
@@ -400,6 +423,11 @@ multistepplot
         layout := @layout [vplot
                            Pplot
                            δplot]
+    end
+
+    if !boundarywork # don't want to show gait initiation
+        boundaryvels[1] = NaN # suppresses plotting of initial boundary velocity
+        # and associated work or push-off
     end
 
     # vplot
@@ -420,8 +448,13 @@ multistepplot
         yguide := plotwork ? "Work" : "P"
         ylims := (0, Inf)
         #xlims := (0.5, n+0.5)
-        plotwork ? ([0.5; 1:n; n+0.5], [1/2*(v[1]^2-boundaryvels[1]^2); 1/2 .* P.^2; NaN]) :
+        if boundarywork # include an impulse to initiate or terminate gait
+            plotwork ? ([0.5; 1:n; n+0.5], [1/2*(v[1]^2-boundaryvels[1]^2); 1/2 .* P.^2; NaN]) :
                    ([0.5;1:n;n+0.5], [v[1]-boundaryvels[1]; P; NaN]) # just plot the push-offs
+        else
+            plotwork ? (1:n, 1/2 .* P.^2) :
+                (1:n, P)
+        end
     end
 
     if doslope # draw the terrain heights (cumulative sum of angles)
@@ -586,11 +619,14 @@ export plotvees, plotvees!
 """
     plotvees(results::MultiStepResults [, tchange = 1, boundaryvels = (0.,0.))
 
-Plots a series of discrete speeds for multiple steps, along with a spline
+Plots a series of discrete speeds for multiple steps, along with a line
 to connect the discrete points. Returns a `Plot` struct. See also plotvees!(p, ...).
 Other options: usespline = false, color = :auto, rampuporder = 2, tscale = 1, vscale = 1,
-speedtype = :stride vs :midstance (default stride speed is stride length divided by stride 
-time between footfalls; midstance explicitly includes ramp-up and -down profiles)
+speedtype = :stride || :midstance ||:step Default `:midstance` is optimization decision variables.
+`:stride` speed is stride length divided by stride 
+time between footfalls. `:step`` speed is step length divided by step time; shortwalks uses 
+step length divided by step time with time change to initiate gait, to match
+short walks experiments.
 """
 plotvees(results::MultiStepResults; veeparms...) = plotvees!(plot(), results; veeparms...)
 
@@ -598,7 +634,7 @@ plotvees(results::MultiStepResults; veeparms...) = plotvees!(plot(), results; ve
 plotvees!(results::MultiStepResults; veeparms...) = plotvees!(Plots.CURRENT_PLOT.nullableplot, results; veeparms...)
 
 function plotvees!(p::Union{Plots.Plot,Plots.Subplot}, msr::MultiStepResults; tchange = 3, boundaryvels = (0.,0.),
-    color = :auto, usespline=false, rampuporder = 2, tscale = 1, vscale = 1, speedtype = :step, plotoptions...)
+    color = :auto, usespline=false, rampuporder = 2, tscale = 1, vscale = 1, speedtype = :midstance, plotoptions...)
     if speedtype == :shortwalks # to match short walks paper
         v = [0; msr.vm0; msr.steps.steplength ./ msr.steps.tf; msr.vm0; 0]*vscale
         times = cumsum([0; tchange; tchange; msr.steps[1:end-1].tf*tscale; msr.steps[end].tf*tscale-tchange*0.3;tchange*1.3]) # where we padded by tchange
@@ -615,7 +651,7 @@ function plotvees!(p::Union{Plots.Plot,Plots.Subplot}, msr::MultiStepResults; tc
     else 
         error("Option speedtype unrecognized: ", 2)
     end
-    n = length(msr.steps)
+#=     n = length(msr.steps)
     # make smooth ramp-up in speed
     t0 = range(0, tchange, length=10)
     vstart = msr.vm0*(t0/tchange).^rampuporder      # ramp-up in speed, monomial degree ramporder
@@ -639,7 +675,7 @@ function plotvees!(p::Union{Plots.Plot,Plots.Subplot}, msr::MultiStepResults; tc
         taccel = twhole[0.1*maximum(vwhole) .<= vwhole .< 0.9*maximum(vwhole)]
         tspeedup = taccel[taccel .< 0.5*twhole[end]]
         tslowdown = taccel[taccel .>= 0.5*twhole[end]]
-    end
+    end =#    
     plot!(p, times, v, legend=:none; color=color, markershape=:circle, markeralpha=0.2, 
         xguide="time", yguide="speed", markercolor=:match, plotoptions...)
 end

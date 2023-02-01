@@ -1,7 +1,7 @@
 name = "DynLoco"
 uuid = "086b9634-299f-4133-910a-656d08a98501"
 authors = ["Art Kuo <arthurdkuo@gmail.com> and contributors"]
-version = "0.1.1"
+version = "0.1.2"
 
 [deps]
 Dierckx = "39dd38d3-220a-591b-8e3c-4c3a8c710a94"

@@ -197,7 +197,7 @@ for (i,result) in enumerate(results44) # add in longer steps (dotted lines)
 end
 plot(ptop, pleft, pright, layout= @layout [ [a{0.15h}; b] c{0.15w}])
 #plot(pleft, pright, layout=grid(1,2,widths=(0.85,0.15)))
-Plots.display(p)
+#Plots.display()
 println("Durations of a factor of ", (durations[end,1]+2tchange)/(durations[end,end]+2tchange))
 println("Peak speeds over a range of ", peaks[end,end]/peaks[end,1])
 println("  about ", peaks[end,1]*sqrt(9.81)," to ", peaks[end,end]*sqrt(9.81), "m/s")
@@ -403,8 +403,7 @@ end
 Plots.display(p)
 
 ## Short walks: Varying slope angles
-# The steeper, the more skewed the speed profile
-
+# The steeper, the more skewed the speed profile.
 # Make plots comparing up, level, down for various numbers of steps
 wstar4s = findgait(WalkRW2l(α=0.4,safety=true), target=:speed=>0.4, varying=:P)
 myslopes = 0:0.02:0.08
@@ -534,12 +533,12 @@ wstar = findgait(WalkRW2l(α=0.35,safety=true), target=:speed=>0.4, varying=:P)
 N = 6
 walktime = N * onestep(wstar).tf *0.82 # meant to be a brisk walk
 walkdistance = N * onestep(wstar).steplength
-rampresult = optwalkslope(wstar, N, boundaryvels = (0., 0.), symmetric = true,
+rampresult = optwalkslope(wstar, N, boundaryvels = (0., 0.), symmetric = false,
     totaltime = walktime)
 p = multistepplot(rampresult; plotwork=true, label="ramp")
 println("ramp total cost = ", rampresult.totalcost)
 flatresult = optwalk(wstar, N, boundaryvels = (0., 0.),
-    totaltime = rampresult.totaltime, δ = zeros(6))
+    totaltime = rampresult.totaltime, δs = zeros(6))
 println("flat total cost = ", flatresult.totalcost)
 multistepplot!(flatresult; plotwork=true, label="flat")
 # optionally, try a reversed ramp and see if it's higher cost still
@@ -785,8 +784,9 @@ nocompmsr.totalcost
 ## Walk over a single bump with a reactive compensation
 nbump = Int((nsteps+1)/2)
 reactmsr1 = multistep(wstar4s, Ps=fill(wstar4s.P,nbump),δangles=δs[1:nbump],boundaryvels=(wstar4s.vm,wstar4s.vm))
-reactmsr2 = optwalk(wstar4s, nsteps-nbump, totaltime = nominalmsr.totaltime - reactmsr1.totaltime - 2,boundaryvels=(reactmsr1.steps[end].vm,wstar4s.vm), boundarywork=(false,false))
-multistepplot(reactmsr2)
+reactmsr2 = optwalk(wstar4s, nsteps-nbump, totaltime = nominalmsr.totaltime - reactmsr1.totaltime,boundaryvels=(reactmsr1.steps[end].vm,wstar4s.vm), boundarywork=(false,false))
+reactmsr = cat(reactmsr1, reactmsr2)
+multistepplot(reactmsr,boundarywork=false)
 
 
 
@@ -794,7 +794,7 @@ multistepplot(reactmsr2)
 # Short walks: Walk a certain number of steps, with minimum energy-time vs steady minCOT
 # where it's possible to stay almost exactly at minCOT, except for start-up 
 # this is like trapezoidal, but using an objective to make every step have same speed
-wstar4s = findgait(WalkRW2l(α=0.35,safety=true), target=:speed=>0.5, varying=:P)
+wstar4s = findgait(WalkRW2l(α=0.35,safety=true), target=:speed=>0.4, varying=:P)
 wstar4n = findgait(WalkRW2l(α=0.35, safety=true), target=:speed=>0.4, varying=:P)
 nsteps = 10
 ctime = 0.0195
@@ -805,9 +805,9 @@ A = 1.9*wstar4s.vm/(nsteps*onestep(wstar4s).tf)
 v0 = 0.11#0.8*A*tchange#0.12
 mintrimsr=optwalktriangle(wstar4n, nsteps, A = A, boundarywork=false,boundaryvels=(v0,v0))
 p = plot(layout=(1,2))
-plotvees!(p[1],nominalmsr, tchange=tchange, rampuporder=1, usespline = false, markershape=:circle,speedtype=:shortwalks)
-plotvees!(p[1],minvarmsr, tchange=tchange, rampuporder=1, usespline = false,markershape=:circle, speedtype=:shortwalks)
-plotvees!(p[1],mintrimsr, tchange=tchange, rampuporder=1, usespline = false,markershape=:circle, speedtype=:shortwalks)
+plotvees!(p[1],nominalmsr, tchange=tchange, rampuporder=1, usespline = false, markershape=:circle,speedtype=:shortwalks,markeralpha=1)
+plotvees!(p[1],minvarmsr, tchange=tchange, rampuporder=1, usespline = false,markershape=:circle, speedtype=:shortwalks,markeralpha=1)
+plotvees!(p[1],mintrimsr, tchange=tchange, rampuporder=1, usespline = false,markershape=:circle, speedtype=:shortwalks,markeralpha=1)
 plot!(p[2],[0:nsteps+1], [1/2*nominalmsr.vm0^2; nominalmsr.steps.Pwork; NaN],markershape=:circle)
 #plot!(p[2],[0:nsteps+1], [NaN; nominalmsr.steps.Cwork; -1/2*nominalmsr.steps[end].vm0^2], markershape=:circle)
 plot!(p[2],[0:nsteps+1], [1/2*minvarmsr.vm0^2; minvarmsr.steps.Pwork; NaN],markershape=:circle,xticks=0:nsteps+1)
@@ -828,3 +828,25 @@ println("ratio = ",  (1/2*mintrimsr.vm0^2 + sum(mintrimsr.steps.Pwork))/(1/2*nom
 threecosts = [1/2*nominalmsr.vm0^2 + sum(nominalmsr.steps.Pwork), 1/2*minvarmsr.vm0^2 + sum(minvarmsr.steps.Pwork), 1/2*mintrimsr.vm0^2 + sum(mintrimsr.steps.Pwork)]
 bar(threecosts,xticks=((1,2,3),("Energy-Time", "Steady min-COT", "Steady accel")))
 savefig("threebars.pdf")
+
+# for each of the steps, can I plot a 3d plot comparing
+# delta, push-off, work/time or velocity?
+# try plotting P, v for zero delta
+Ps = 0.02:0.02:0.25
+vees = 0.05:0.05:0.7
+mysurfacework = [onestep(wstar4s,P=P,vm=vm).Pwork for P in Ps, vm in vees]
+mysurfacetime = [onestep(wstar4s,P=P,vm=vm).tf for P in Ps, vm in vees]
+surface(Ps, vees, 100 .* mysurfacework,alpha=0.5,xlabel="P",ylabel="v")
+surface!(Ps, vees, mysurfacetime,alpha=0.5,zlims=(0,3))
+i = 3
+opt = nominalmsr.steps[i]
+plot!([opt.P], [opt.vm0], [100 * opt.Pwork], markershape=:circle)
+# vary P through the optimum
+mylinework = [onestep(wstar4s,P=P,vm=opt.vm0).Pwork for P in Ps]
+mylinetime = [onestep(wstar4s,P=P,vm=opt.vm0).tf for P in Ps]
+plot!(Ps, 0 .*Ps .+ opt.vm0, mylinework)
+plot!(Ps, 0 .*Ps .+ opt.vm0, mylinetime)
+
+onestep(wstar4s,P=Ps[i],vm=vees[i])
+#deltas = -0.05:0.01:0.05
+
