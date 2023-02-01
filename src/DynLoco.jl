@@ -646,7 +646,7 @@ function plotvees!(p::Union{Plots.Plot,Plots.Subplot}, msr::MultiStepResults; tc
         times = cumsum([0; msr.steps.tf*tscale; tchange], dims=1)
         v = [0; stepdistances./steptimes]*vscale
     elseif speedtype == :midstance # speed sampled at mid-stance
-        v = [boundaryvels[1]; msr.vm0; msr.steps.vm; boundaryvels[2]]*vscale # vm0 is the speed at beginning of first step, vm is the mid-stance speed of first step
+        v = [boundaryvels[1]; msr.vm0; msr.steps.vm; boundaryvels[2]].*vscale # vm0 is the speed at beginning of first step, vm is the mid-stance speed of first step
         times = cumsum([0; tchange; msr.steps.tf*tscale; tchange]) # add up step times, starting from ramp-up
     else 
         error("Option speedtype unrecognized: ", 2)
