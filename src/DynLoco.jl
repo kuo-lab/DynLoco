@@ -621,7 +621,7 @@ export plotvees, plotvees!
 
 Plots a series of discrete speeds for multiple steps, along with a line
 to connect the discrete points. Returns a `Plot` struct. See also plotvees!(p, ...).
-Other options: usespline = false, color = :auto, rampuporder = 2, tscale = 1, vscale = 1,
+Other options: color = :auto, tscale = 1, vscale = 1,
 speedtype = :stride || :midstance ||:step Default `:midstance` is optimization decision variables.
 `:stride` speed is stride length divided by stride 
 time between footfalls. `:step`` speed is step length divided by step time; shortwalks uses 
@@ -634,7 +634,8 @@ plotvees(results::MultiStepResults; veeparms...) = plotvees!(plot(), results; ve
 plotvees!(results::MultiStepResults; veeparms...) = plotvees!(Plots.CURRENT_PLOT.nullableplot, results; veeparms...)
 
 function plotvees!(p::Union{Plots.Plot,Plots.Subplot}, msr::MultiStepResults; tchange = 3, boundaryvels = (0.,0.),
-    color = :auto, usespline=false, rampuporder = 2, tscale = 1, vscale = 1, speedtype = :midstance, plotoptions...)
+    color = :auto, tscale = 1, vscale = 1, speedtype = :midstance, 
+    normalizeTimeOnBump = false, plotoptions...)
     if speedtype == :shortwalks # to match short walks paper
         v = [0; msr.vm0; msr.steps.steplength ./ msr.steps.tf; msr.vm0; 0]*vscale
         times = cumsum([0; tchange; tchange; msr.steps[1:end-1].tf*tscale; msr.steps[end].tf*tscale-tchange*0.3;tchange*1.3]) # where we padded by tchange
@@ -651,31 +652,20 @@ function plotvees!(p::Union{Plots.Plot,Plots.Subplot}, msr::MultiStepResults; tc
     else 
         error("Option speedtype unrecognized: ", 2)
     end
-#=     n = length(msr.steps)
-    # make smooth ramp-up in speed
-    t0 = range(0, tchange, length=10)
-    vstart = msr.vm0*(t0/tchange).^rampuporder      # ramp-up in speed, monomial degree ramporder
-    vend = msr.vm0*(1 .- t0/tchange).^rampuporder # ramp-down in speed
-    if usespline     # make a smooth spline from discrete velocities
-        k = rampuporder # spline order
-        if length(v) > 2 # enough points to make splines from v alone
-            spline = Spline1D(times, v; k=k)
-        else # only say 1 point, so let's pad v with the ramp-up ramp-down
-            spline = Spline1D([t0[1]; times; t0[end]+times[end]],
-                [vstart[1]; v; vend[end]], k=k)
+
+    # optionally define t=0 for heelstrike on first uneven step if any, or on a predefined step number
+    if !(normalizeTimeOnBump == false)  # it's either true or a number
+        if normalizeTimeOnBump isa Bool # true; find it yourself
+            firstbump = findfirst(!iszero, msr.steps.δ) # find first uneven step
+        else # should be a number, so use that step number
+            firstbump = normalizeTimeOnBump
         end
-        tspline = range(times[1], times[end], length=20)
-        plot!(p,tspline, spline.(tspline), color=color;
-            plotoptions...)
-        #plot!(p,[t0; tspline; t0 .+ times[end]], [vstart; spline.(tspline); vend], color=color;
-        #    plotoptions...)
-        twhole = [t0; tspline; t0 .+ times[end]]
-        vwhole = [vstart; spline.(tspline); vend]
-        tsteady = twhole[vwhole .>= 0.9*maximum(vwhole)]
-        taccel = twhole[0.1*maximum(vwhole) .<= vwhole .< 0.9*maximum(vwhole)]
-        tspeedup = taccel[taccel .< 0.5*twhole[end]]
-        tslowdown = taccel[taccel .>= 0.5*twhole[end]]
-    end =#    
+        if firstbump !== nothing
+            firstbumptime = sum(msr.steps.tf[1:firstbump-1]) + msr.steps.tf1[firstbump] # tf1 is heelstrike
+            times .= times .- firstbumptime # zero time corresponds to first bump or the number we were told
+        end
+    end
+        
     plot!(p, times, v, legend=:none; color=color, markershape=:circle, markeralpha=0.2, 
         xguide="time", yguide="speed", markercolor=:match, plotoptions...)
 end
