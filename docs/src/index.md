@@ -28,7 +28,9 @@ onestep(w).speed # about 0.4 dimensionless speed
 ```@docs
 WalkRW2l
 onestep
+simulatestep
 ```
+
 # Finding gaits
 ```@docs
 findgait
@@ -37,6 +39,5 @@ findgait
 # Optimizing a model
 ```@docs
 optwalk
-optwalkslope
 optwalktime
 ```

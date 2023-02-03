@@ -239,7 +239,7 @@ after.
 Parameter values can be supplied to override the existing field values. 
 Notably, includes vm, P, δangle.
 Output is arrays (t, θ, Ω).
-See `onestep` to get just the discrete mid-stance states
+See `onestep` to get just the discrete mid-stance states.
 """
 function simulatestep(w::WalkRW2l; options...)
     # find end conditions of a step, destructure into local variables
@@ -483,7 +483,7 @@ final speeds, default nominal middle-stance speed `vm`. To start and end at rest
 start and end from `boundaryvels`. `totaltime` is the total time to take the steps, by default
 the same time expected of the nominal `w` on level ground.
 
-See also `optwalkslope`
+See also `optwalktime`.
 """
 function optwalk(w::W, numsteps=5; boundaryvels::Union{Tuple,Nothing} = nothing,
     boundarywork::Union{Tuple{Bool,Bool},Bool} = (true,true), totaltime=numsteps*onestep(w).tf,
@@ -690,7 +690,7 @@ start and end from `boundaryvels`. `symmetric = false` whether to enforce fore-a
 the slope profile. `totaltime` is the total time to take the steps, by default the same
 time expected of the nominal `w` on level ground. `startv` initial guess at speeds.
 
-See also `optwalk` and `optwalkslope`
+See also `optwalk`.
 """
 function optwalktime(w::W, nsteps=5; boundaryvels::Union{Tuple,Nothing} = (0.,0.), safety=true,
     ctime = 0.05, tchange = 3., boundarywork = true, δs = zeros(nsteps), startv = w.vm, negworkcost = 0., walkparms...) where W <: Walk
@@ -925,10 +925,6 @@ function stepspeeds(steps; tchange=1.75) # these are step speeds as used in :sho
     stepdistances = [steps.steplength; 0] # to the "body speed" used in manuscript
     return cumsum([0;steptimes],dims=1), [0; stepdistances./steptimes]
 end
-
-
-include("optwalktriangle.jl") #
-
 
 
 end # Module
