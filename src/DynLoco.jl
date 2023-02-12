@@ -614,7 +614,7 @@ function logshave(x, xmin=1e-10)
     x >= xmin ? log(x) : log(xmin) + (x - xmin)
 end # logshave
 
-export plotvees, plotvees!
+export plotvees, plotvees!, plotterrain, plotterrain!
 
 """
     plotvees(results::MultiStepResults [, tchange = 1, boundaryvels = (0.,0.))
@@ -660,6 +660,32 @@ function plotvees!(p::Union{Plots.Plot,Plots.Subplot}, msr::MultiStepResults; tc
 
     plot!(p, times, v, legend=:none; color=color, markershape=:circle, markeralpha=0.2, 
         xguide="time", yguide="speed", markercolor=:match, plotoptions...)
+end
+
+"""
+    plotterrain(heights)
+
+Plots a vector of discrete terrain `heights`, one per step, against step number.
+Returns a `Plots.plot` struct that can be added to or displayed.
+Each step is flat and centered at the step number.
+Options include `bar_width = 1`` (default), `fillto = -0.1` the bottom edge of
+terrain, and any other options to Plots.jl. 
+
+Use `plotterrain(p, heights)` to add to an existing `p` plot.
+"""
+function plotterrain(heights; plotoptions...)
+    p = plot()
+    plotterrain!(p, heights; plotoptions...)
+end    
+
+"""
+    plotterrain(p, heights)
+Adds a terrain plot to an existing plot `p`. See `plotterrain`.
+"""
+function plotterrain!(p::Union{Plots.Plot,Plots.Subplot}, δs; fillto=-0.1, plotoptions... )
+    
+    bar(p, δs; bar_width=1, fillto=fillto, linewidth=0, plotoptions...)
+
 end
 
 """
