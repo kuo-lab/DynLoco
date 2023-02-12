@@ -635,7 +635,7 @@ plotvees!(results::MultiStepResults; veeparms...) = plotvees!(Plots.CURRENT_PLOT
 
 function plotvees!(p::Union{Plots.Plot,Plots.Subplot}, msr::MultiStepResults; tchange = 3, boundaryvels = (0.,0.),
     color = :auto, tscale = 1, vscale = 1, speedtype = :midstance, 
-    normalizeTimeOnBump = false, plotoptions...)
+    setfirstbumpstep = false, plotoptions...)
     if speedtype == :shortwalks # to match short walks paper
         v = [0; msr.vm0; msr.steps.steplength ./ msr.steps.tf; msr.vm0; 0]*vscale
         times = cumsum([0; tchange; tchange; msr.steps[1:end-1].tf*tscale; msr.steps[end].tf*tscale-tchange*0.3;tchange*1.3]) # where we padded by tchange
@@ -653,7 +653,12 @@ function plotvees!(p::Union{Plots.Plot,Plots.Subplot}, msr::MultiStepResults; tc
         error("Option speedtype unrecognized: ", 2)
     end
 
-    # optionally define t=0 for heelstrike on first uneven step if any, or on a predefined step number
+    firstbumpstep = stepoffirstbump(setfirstbumpstep)
+    if firstbumpstep > 0 # redefine t=0 to correspond to heelstrike on this bump
+        times .= times .- sum(msr.steps.tf[1:firstbumpstep-1]) + msr.steps.tf1[firstbumpstep] # tf1 is heelstrike
+    end
+
+#==    # optionally define t=0 for heelstrike on first uneven step if any, or on a predefined step number
     if !(normalizeTimeOnBump == false)  # it's either true or a number
         if normalizeTimeOnBump isa Bool # true; find it yourself
             firstbump = findfirst(!iszero, msr.steps.δ) # find first uneven step
@@ -665,12 +670,30 @@ function plotvees!(p::Union{Plots.Plot,Plots.Subplot}, msr::MultiStepResults; tc
             times .= times .- firstbumptime # zero time corresponds to first bump or the number we were told
         end
     end
-        
+   =#     
     plot!(p, times, v, legend=:none; color=color, markershape=:circle, markeralpha=0.2, 
         xguide="time", yguide="speed", markercolor=:match, plotoptions...)
 end
 
+"""
+    stepoffirstbump(δs, setfirstbumpstep = false)
 
+Determines which step the first bump occurs on for terrain `δs`. Returns an
+integer referring to which step/index of `δs` should be treated as time 0.
+`setfirstbumpstep` = `true``   determines first step that has non-zero `δ`
+                   = false     ignores terrain, returns step 0
+                   = N         returns N as set by user
+Used for plotting speeds and terrains, to align t=0 to a common step.
+"""
+function stepoffirstbump(δs, setfirstbumpstep::Bool = false)
+    if setfirstbumpstep && any(!iszero)
+        firstbump = findfirst(!iszero, δs)
+    else
+        firstbump = 0 # no shift in step number
+    end
+end
+
+stepoffirstbump(δs, setfirstbumpstep::Real==0) = setfirstbumpstep
 
 using JuMP, Ipopt
 export optwalktime
