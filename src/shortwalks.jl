@@ -653,11 +653,11 @@ wstar4s = findgait(WalkRW2l(α=0.4,safety=true), target=:speed=>0.45, varying=:P
 nsteps = 15
 δs = zeros(nsteps); δs[Int((nsteps+1)/2)] = 0.05
 nominalmsr=optwalk(wstar4s, nsteps, boundarywork=false, δs=δs)
-plotvees(nominalmsr,speedtype=:midstance,boundaryvels=(wstar4s.vm,wstar4s.vm),tchange=0,normalizeTimeOnBump=true)
+plotvees(nominalmsr,speedtype=:midstance,boundaryvels=(wstar4s.vm,wstar4s.vm),tchange=0,setfirstbumpstep=true)
 multimsr = multistep(wstar4s, fill(wstar4s.P, nsteps))
-plotvees!(multimsr,speedtype=:midstance,boundaryvels=(wstar4s.vm,wstar4s.vm),tchange=0,normalizeTimeOnBump=false)
-plotvees!(multimsr,speedtype=:midstance,boundaryvels=(wstar4s.vm,wstar4s.vm),tchange=0,normalizeTimeOnBump=true)
-plotvees!(multimsr,speedtype=:midstance,boundaryvels=(wstar4s.vm,wstar4s.vm),tchange=0,normalizeTimeOnBump=4)
+plotvees!(multimsr,speedtype=:midstance,boundaryvels=(wstar4s.vm,wstar4s.vm),tchange=0,setfirstbumpstep=false)
+plotvees!(multimsr,speedtype=:midstance,boundaryvels=(wstar4s.vm,wstar4s.vm),tchange=0,setfirstbumpstep=true)
+plotvees!(multimsr,speedtype=:midstance,boundaryvels=(wstar4s.vm,wstar4s.vm),tchange=0,setfirstbumpstep=4)
 
 
 remainingtime = nominalmsr.totaltime

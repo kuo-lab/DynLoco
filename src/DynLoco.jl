@@ -653,24 +653,11 @@ function plotvees!(p::Union{Plots.Plot,Plots.Subplot}, msr::MultiStepResults; tc
         error("Option speedtype unrecognized: ", 2)
     end
 
-    firstbumpstep = stepoffirstbump(setfirstbumpstep)
+    firstbumpstep = stepoffirstbump(msr.steps.δ, setfirstbumpstep)
     if firstbumpstep > 0 # redefine t=0 to correspond to heelstrike on this bump
-        times .= times .- sum(msr.steps.tf[1:firstbumpstep-1]) + msr.steps.tf1[firstbumpstep] # tf1 is heelstrike
+        times .= times .- (sum(msr.steps.tf[1:firstbumpstep-1]) + msr.steps.tf1[firstbumpstep]) # tf1 is heelstrike
     end
 
-#==    # optionally define t=0 for heelstrike on first uneven step if any, or on a predefined step number
-    if !(normalizeTimeOnBump == false)  # it's either true or a number
-        if normalizeTimeOnBump isa Bool # true; find it yourself
-            firstbump = findfirst(!iszero, msr.steps.δ) # find first uneven step
-        else # should be a number, so use that step number
-            firstbump = normalizeTimeOnBump
-        end
-        if firstbump !== nothing
-            firstbumptime = sum(msr.steps.tf[1:firstbump-1]) + msr.steps.tf1[firstbump] # tf1 is heelstrike
-            times .= times .- firstbumptime # zero time corresponds to first bump or the number we were told
-        end
-    end
-   =#     
     plot!(p, times, v, legend=:none; color=color, markershape=:circle, markeralpha=0.2, 
         xguide="time", yguide="speed", markercolor=:match, plotoptions...)
 end
@@ -686,14 +673,14 @@ integer referring to which step/index of `δs` should be treated as time 0.
 Used for plotting speeds and terrains, to align t=0 to a common step.
 """
 function stepoffirstbump(δs, setfirstbumpstep::Bool = false)
-    if setfirstbumpstep && any(!iszero)
+    if setfirstbumpstep && any(!iszero(δs))
         firstbump = findfirst(!iszero, δs)
     else
         firstbump = 0 # no shift in step number
     end
 end
 
-stepoffirstbump(δs, setfirstbumpstep::Real==0) = setfirstbumpstep
+stepoffirstbump(δs, setfirstbumpstep::Real=0) = setfirstbumpstep
 
 using JuMP, Ipopt
 export optwalktime
