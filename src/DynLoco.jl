@@ -683,9 +683,7 @@ end
 Adds a terrain plot to an existing plot `p`. See `plotterrain`.
 """
 function plotterrain!(p::Union{Plots.Plot,Plots.Subplot}, δs; fillto=-0.1, plotoptions... )
-    
-    bar(p, δs; bar_width=1, fillto=fillto, linewidth=0, plotoptions...)
-
+    bar!(p, δs; bar_width=1, fillto=fillto, linewidth=0, plotoptions...)
 end
 
 """
