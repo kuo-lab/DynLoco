@@ -668,8 +668,8 @@ end
 Plots a vector of discrete terrain `heights`, one per step, against step number.
 Returns a `Plots.plot` struct that can be added to or displayed.
 Each step is flat and centered at the step number.
-Options include `bar_width = 1`` (default), `fillto = -0.1` the bottom edge of
-terrain, and any other options to Plots.jl. 
+Options include `bar_width = 1` (default), `fillto = -0.1` the bottom edge of
+terrain, `steplength = 1` meaning integer steps, and any other options to Plots.jl. 
 
 Use `plotterrain(p, heights)` to add to an existing `p` plot.
 """
@@ -682,11 +682,9 @@ end
     plotterrain(p, heights)
 Adds a terrain plot to an existing plot `p`. See `plotterrain`.
 """
-function plotterrain!(p::Union{Plots.Plot,Plots.Subplot}, δs; setfirstbumpstep=false, fillto=-0.1, plotoptions... )
-    @show stepoffirstbump(δs, setfirstbumpstep)
-    stepnums = (1:length(δs)) .- stepoffirstbump(δs,setfirstbumpstep)
-    @show stepnums
-    bar!(p, stepnums, δs; bar_width=1, fillto=fillto, linewidth=0, plotoptions...)
+function plotterrain!(p::Union{Plots.Plot,Plots.Subplot}, heights; setfirstbumpstep=false, steplength=1, fillto=-0.1, plotoptions... )
+    stepnums = (1:length(heights)) .- stepoffirstbump(heights,setfirstbumpstep)
+    bar!(p, steplength*stepnums, heights; bar_width=1, fillto=fillto, linewidth=0, plotoptions...)
 end
 
 """

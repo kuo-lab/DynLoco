@@ -855,3 +855,9 @@ plot!(Ps, 0 .*Ps .+ opt.vm0, mylinetime)
 onestep(wstar4s,P=Ps[i],vm=vees[i])
 #deltas = -0.05:0.01:0.05
 
+δs = [0, 0, 0, 0.05, 0.05, 0.05, 0, 0, 0, -0.05, -0.05, -0.05, 0, 0, 0]
+plotterrain(cumsum(δs); setfirstbumpstep=true)
+plotterrain(cumsum(δs); setfirstbumpstep=3)
+p = plot()
+plotterrain!(p, cumsum(δs), setfirstbumpstep = true)
+plotterrain!(p, cumsum(δs), setfirstbumpstep = 3)
