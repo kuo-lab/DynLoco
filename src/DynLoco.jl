@@ -961,5 +961,6 @@ function stepspeeds(steps; tchange=1.75) # these are step speeds as used in :sho
     return cumsum([0;steptimes],dims=1), [0; stepdistances./steptimes]
 end
 
+include("optwalktriangle.jl") # for constant acceleration-deceleration profile
 
 end # Module
