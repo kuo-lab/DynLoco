@@ -55,3 +55,9 @@ Jupyter notebook, and run as cells. Or in REPL,
     If you already have a Python installation, you may prefer to install manually, e.g. using Conda. See [documentation](https://github.com/JuliaLang/IJulia.jl).
     
     Jupyter notebooks run in a browser, but a desktop app experience is also available, with [nteract](https://nteract.io/desktop).
+
+## References
+Kuo, Arthur D. 2002. “[Energetics of Actively Powered Locomotion Using the Simplest Walking Model](https://www.ncbi.nlm.nih.gov/pubmed/11871597).”
+*Journal of Biomechanical Engineering* 124 (1): 113–20.
+
+This repository: [![DOI](https://zenodo.org/badge/594234010.svg)](https://zenodo.org/badge/latestdoi/594234010)
